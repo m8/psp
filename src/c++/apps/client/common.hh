@@ -118,7 +118,7 @@ int parse_config(std::string &app_cfg, std::vector<UdpContext *> &net_contexts,
                     }
                     sched->cmd_ratios = cfg_schedules[i]["cmd_ratios"].as<std::vector<double>>();
                     if (cfg_schedules[i]["cmd_lists"].IsDefined()) {
-                        auto &cmd_lists = cfg_schedules[i]["cmd_lists"].as<std::vector<std::string>>();
+                        auto cmd_lists = cfg_schedules[i]["cmd_lists"].as<std::vector<std::string>>();
                         PSP_TRUE(EINVAL, cmd_lists.size() == sched->cmd_ratios.size());
                         sched->requests_str.resize(cmd_lists.size());
                         for (size_t j = 0; j < cmd_lists.size(); ++j) {
@@ -132,7 +132,7 @@ int parse_config(std::string &app_cfg, std::vector<UdpContext *> &net_contexts,
                         }
                     } else {
                         PSP_TRUE(ENOENT, cfg_schedules[i]["cmd_mean_ns"].IsDefined());
-                        auto &cmd_mean_ns = cfg_schedules[i]["cmd_mean_ns"].as<std::vector<uint32_t>>();
+                        auto cmd_mean_ns = cfg_schedules[i]["cmd_mean_ns"].as<std::vector<uint32_t>>();
                         PSP_TRUE(EINVAL, cmd_mean_ns.size() == sched->cmd_ratios.size());
                         for (auto &m: cmd_mean_ns) {
                             sched->reqs_us.push_back(m);
