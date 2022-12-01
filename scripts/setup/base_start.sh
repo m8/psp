@@ -10,7 +10,7 @@ sudo sysctl kernel.nmi_watchdog=0
 sudo sysctl -w kernel.watchdog=0
 
 # Setup huge pages
-sudo sh -c 'echo 8192 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages;'
+sudo sh -c 'for i in /sys/devices/system/node/node*/hugepages/hugepages-2048kB/nr_hugepages; do echo 8192 > $i; done'
 
 # Have the NIC use IGB_UIO for Perséphone and the client. Shinjuku has its own i40e driver.
 # Disable turbo
