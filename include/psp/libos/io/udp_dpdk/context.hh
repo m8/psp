@@ -101,9 +101,10 @@ class UdpContext {
             }
             mbuf_pool = *mempool;
             rte_ether_unformat_addr(mac.c_str(), &my_mac);
-            rte_eth_dev_mac_addr_add(port_id, my_mac);
-            if (ret != 0)
-                PSP_PANIC("Could not add a new MAC address to the device");
+            
+            // rte_eth_dev_mac_addr_add(port_id, my_mac);
+            // if (ret != 0)
+            //     PSP_PANIC("Could not add a new MAC address to the device");
         }
 
         ~UdpContext() {
