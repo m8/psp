@@ -1,7 +1,6 @@
 cpus:
 - 2
 - 4
-- 6
 log_dir: /tmpfs/experiments/
 n_resas: 0
 net_workers:
@@ -15,7 +14,7 @@ network:
   - -n
   - '2'
   - -l
-  - 0, 2, 4, 6
+  - 0, 2, 4
   - --file-prefix
   - maxdml
   - -w
@@ -24,5 +23,5 @@ network:
 requests:
 - type: SHORT
 workers:
-  number: 14
+  number: 2
   type: MB
