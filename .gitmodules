@@ -3,18 +3,9 @@
 	url = https://github.com/DPDK/dpdk.git
     branch = v20.05
     ignore = dirty
-[submodule "submodules/shinjuku"]
-	path = submodules/shinjuku
-	url = https://github.com/maxdml/shinjuku
 [submodule "submodules/rocksdb"]
 	path = submodules/rocksdb
 	url = https://github.com/facebook/rocksdb
 [submodule "submodules/fake_work"]
 	path = submodules/fake_work
 	url = https://github.com/maxdml/fake_work
-[submodule "submodules/shenango"]
-	path = submodules/shenango
-	url = https://github.com/joshuafried/psp_shenango
-[submodule "submodules/Shremote"]
-	path = submodules/Shremote
-	url = https://github.com/isaac-ped/Shremote
