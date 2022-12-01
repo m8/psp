@@ -2,6 +2,8 @@
 
 #include <csignal>
 
+extern NetWorker * net_worker;
+
 int main (int argc, char *argv[]) {
     if (TRACE)
         PSP_INFO("Starting PSP application with TRACE on");
@@ -17,12 +19,20 @@ int main (int argc, char *argv[]) {
         log_error("can't catch SIGTERM");
 
     /* Start all workers */
-    for (unsigned int i = 0; i < total_workers; ++i) {
+    for (unsigned int i = 0; i < 2; ++i) {
         if (workers[i]->launch() != 0) {
             app.psp->stop_all(SIGTERM);
             break;
         }
     }
+
+    PSP_INFO("Sending fake packets\n");
+
+    // Fake packets
+    for (int k = 0; k < 100; k++)
+    {
+        net_worker->fake_work(1);
+    } 
 
     /* Join threads */
     for (unsigned int i = 0; i < total_workers; ++i) {

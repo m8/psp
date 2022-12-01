@@ -17,6 +17,8 @@ std::string label = "PspApp";
 Worker *workers[MAX_WORKERS];
 uint32_t total_workers = 0;
 
+NetWorker *net_worker;
+
 /********** CONTROL PLANE ******************/
 Psp::Psp(std::string &app_cfg, std::string l) {
     get_system_freq();
@@ -58,7 +60,7 @@ Psp::Psp(std::string &app_cfg, std::string l) {
                     net_workers[i]["is_echo"].as<uint32_t>()) {
                     is_echo = true;
                 }
-                NetWorker *net_worker = new NetWorker(is_echo);
+                net_worker = new NetWorker(is_echo);
                 net_worker->eal_thread = true;
                 net_worker->cpu_id = cpus[i];
 

@@ -70,3 +70,30 @@ int NetWorker::work(int status, unsigned long payload) {
 
     return 0;
 }
+
+int NetWorker::fake_work(int status)
+{
+    uint64_t cur_tsc = rdtscp(NULL);
+    n_batchs_rcvd++;
+
+    // create mbuf
+    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(udp_ctx->mbuf_pool);
+    
+    if (unlikely(mbuf == NULL))
+    {
+        PSP_ERROR("Failed to allocate mbuf");
+        return ENOMEM;
+    }
+
+    int ret = dpt.enqueue((unsigned long)mbuf, cur_tsc);
+
+    if (ret == EXFULL or ret == ENOENT)
+    {
+        printf("Net worker add backet failed\n");
+        // Free the request because we can't enqueue it
+        PSP_OK(udp_ctx->free_mbuf((unsigned long)mbuf));
+    }
+    udp_ctx->pop_tail++;
+
+    return 0;
+}
