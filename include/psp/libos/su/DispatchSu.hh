@@ -12,17 +12,30 @@
 #define UPDATE_PERIOD 5 * 1e3 //5 usec
 #define MAX_WINDOWS 8192
 
-struct profiling_windows {
-    uint64_t tsc_start;
-    uint64_t tsc_end;
-    uint64_t count;
-    double mean_ns;
-    uint64_t qlen[MAX_TYPES];
-    uint64_t counts[MAX_TYPES];
-    uint32_t group_res[MAX_TYPES];
-    uint32_t group_steal[MAX_TYPES];
-    bool do_update;
-};
+// struct worker_response
+// {
+//         uint64_t flag;
+//         void * rnbl;
+//         void * mbuf;
+//         uint64_t timestamp;
+//         uint8_t type;
+//         uint8_t category;
+//         char make_it_64_bytes[30];
+// } __attribute__((packed, aligned(64)));
+
+// struct dispatcher_request
+// {
+//         uint64_t flag;
+//         void * rnbl;
+//         void * mbuf;
+//         uint8_t type;
+//         uint8_t category;
+//         uint64_t timestamp;
+//         char make_it_64_bytes[30];
+// } __attribute__((packed, aligned(64)));
+
+// volatile struct worker_response worker_responses[MAX_WORKERS];
+// volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
 
 class Dispatcher : public Worker {
     /* Dispatch mode */
@@ -80,15 +93,11 @@ class Dispatcher : public Worker {
     public: bool first_resa_done;
     public: bool dynamic;
     public: uint32_t update_frequency;
-    public: profiling_windows windows[MAX_WINDOWS];
     private: uint32_t prev_active;
     private: uint32_t n_windows = 0;
     public: uint32_t spillway = 0;
 
-    public: int set_darc();
-    private: int update_darc();
     private: int drain_queue(RequestType *&rtype);
-    private: int dyn_resa_drain_queue(RequestType *&rtype);
     private: int dequeue(unsigned long *payload);
     private: int setup() override;
     private: int work(int status, unsigned long payload) override;
@@ -118,7 +127,6 @@ class Dispatcher : public Worker {
             "Nested dispatcher received " << num_rcvd << " (" << n_batchs_rcvd << " batches)"
             << " dispatched " << num_dped << " but dropped " << n_drops << " requests"
         );
-        PSP_INFO("Latest windows count: " << windows[n_windows].count << ". Performed " << n_windows << " updates.");
         for (uint32_t i = 0; i < n_rtypes; ++i) {
             PSP_INFO(
                 "[" << req_type_str[static_cast<int>(rtypes[i]->type)] << "] has "
@@ -137,31 +145,6 @@ class Dispatcher : public Worker {
             << " pending items"
         );
         delete rtypes[type_to_nsorder[0]];
-
-        if (dp == DARC) {
-             // Record windows statistics
-             std::string path = generate_log_file_path(label, "server/windows");
-             std::cout << "dpt log at " << path << std::endl;
-             std::ofstream output(path);
-             if (not output.is_open()) {
-                 PSP_ERROR("COULD NOT OPEN " << path);
-             } else {
-                 output << "ID\tSTART\tEND\tGID\tRES\tSTEAL\tCOUNT\tUPDATED\tQLEN" << std::endl;
-                 for (size_t i = 0; i < n_windows; ++i) {
-                     auto &w = windows[i];
-                     for (size_t j = 0; j < n_rtypes; ++j) {
-                         output << i << "\t" << std::fixed << w.tsc_start / cycles_per_ns
-                                << "\t" << std::fixed << w.tsc_end / cycles_per_ns
-                                << "\t" << j
-                                << "\t" << w.group_res[j] << "\t" << w.group_steal[j]
-                                << "\t" << w.counts[j] << "\t" << w.do_update
-                                << "\t" << w.qlen[j]
-                                << std::endl;
-                     }
-                 }
-                 output.close();
-             }
-        }
     }
 };
 

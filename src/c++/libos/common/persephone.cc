@@ -161,89 +161,10 @@ Psp::Psp(std::string &app_cfg, std::string l) {
             dpt.rtypes[i] = new RequestType(ReqType::UNKNOWN, 0, 0, 0);
             dpt.type_to_nsorder[static_cast<int>(ReqType::UNKNOWN)] = i;
 
-            memset(dpt.windows, 0, sizeof(profiling_windows) * MAX_WINDOWS);
-
-            if (dpt.dp != Dispatcher::dispatch_mode::DARC) {
-                dpt.first_resa_done = true;
-            } else {
-                // Set spillway core (last core)
-                /* FIXME: this is useless here
-                dpt.spillway = dpt.n_workers - 1;
-                PSP_INFO("Setting spillway core on " << dpt.spillway);
-                */
-
-                /* We first start in cFCFS */
-                dpt.dp = Dispatcher::dispatch_mode::CFCFS;
-                dpt.first_resa_done = false;
-                dpt.dynamic = true;
-                /* Microbench reservation update overheads
-                double durations[1000];
-                for (int i = 0; i < 1000; ++i) {
-                    uint64_t start = rdtscp(NULL);
-                */
-                //Assume we started with an oracle
-                if (req_types[0]["mean_ns"].IsDefined()) {
-                    dpt.set_darc();
-                    dpt.dp = Dispatcher::dispatch_mode::DARC;
-                    dpt.first_resa_done = true;
-                }
-                /*
-                    uint64_t end = rdtscp(NULL);
-                    durations[i] = (end - start) / cycles_per_ns;
-                }
-                std::sort(durations, durations + 1000);
-                printf("median: %f\n", durations[500]);
-                printf("p90: %f\n", durations[900]);
-                printf("p99: %f\n", durations[990]);
-                printf("p99.9: %f\n", durations[999]);
-                */
-                // Support manual DARC tuning for 2 types of requests
-                if (config["n_resas"].IsDefined()) {
-                    dpt.dp = Dispatcher::dispatch_mode::DARC;
-                    dpt.first_resa_done = true;
-                    dpt.dynamic = false;
-                    uint32_t n_resas = config["n_resas"].as<uint32_t>();
-
-                    memset(dpt.groups, '\0', 2 * sizeof(TypeGroups));
-                    dpt.n_groups = 2; // Should be useless
-
-                    // FIXME we rely on requests having been given in ascending runtime order here..
-                    RequestType *shorts = dpt.rtypes[dpt.type_to_nsorder[static_cast<int>(ReqType::SHORT)]];
-                    shorts->type_group = 0;
-                    RequestType *longs = dpt.rtypes[dpt.type_to_nsorder[static_cast<int>(ReqType::LONG)]];
-                    longs->type_group = 1;
-
-                    PSP_INFO("Manually tuning DARC with " << n_resas << " cores for short requests")
-                    dpt.groups[0].n_resas = 0;
-                    for (unsigned int i = 0; i < n_resas; ++i) {
-                        dpt.groups[0].res_peers[dpt.groups[0].n_resas++] = i;
-                    }
-                    dpt.groups[0].n_stealable = 0;
-                    for (unsigned int i = n_resas; i < dpt.n_workers; ++i) {
-                        dpt.groups[0].stealable_peers[dpt.groups[0].n_stealable++] = i;
-                    }
-
-                    PSP_INFO("Longs reservation: " << n_resas << " to " << dpt.n_workers - 1);
-                    dpt.groups[1].n_resas = 0;
-                    for (unsigned int i = n_resas; i < dpt.n_workers; ++i) {
-                        dpt.groups[1].res_peers[dpt.groups[1].n_resas++] = i;
-                    }
-                    dpt.groups[1].n_stealable = 0;
-
-                    for (unsigned int i = 0; i < dpt.groups[0].n_resas; ++i) {
-                        PSP_INFO("Worker " << dpt.groups[0].res_peers[i] << " reserved to shorts");
-                    }
-                    PSP_INFO(
-                        "Shorts can steal: " << n_resas << " to " << dpt.n_workers - 1
-                        << " (" << dpt.groups[0].n_stealable << ")"
-                    );
-                    for (unsigned int i = 0; i < dpt.groups[1].n_resas; ++i) {
-                        PSP_INFO("Worker " << dpt.groups[1].res_peers[i] << " reserved to longs");
-                    }
-                }
-            }
+            dpt.first_resa_done = true;
+            
         } else {
-            if (dpt.dp != Dispatcher::dispatch_mode::CFCFS or dpt.dp != Dispatcher::dispatch_mode::DFCFS) {
+            if (dpt.dp != Dispatcher::dispatch_mode::CFCFS) {
                 PSP_ERROR("Type aware policy " << dpt.dp << " requires request metadata");
                 exit(ENODEV);
             }
@@ -271,8 +192,6 @@ int Psp::CreateWorker(int idx, B *dpt, C *netw, UdpContext* udp_ctx) {
     worker->eal_thread = true;
     worker->cpu_id = cpus[idx];
     workers[idx] = worker;
-    if (dpt->dp == Dispatcher::dispatch_mode::DFCFS) {
-        worker->notify = false;
-    }
+    
     return 0;
 }

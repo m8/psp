@@ -25,9 +25,9 @@ int NetWorker::process_request(unsigned long payload) {
 
 int NetWorker::work(int status, unsigned long payload) {
     // Dispatch enqueued requests
-    if (dpt.dp != Dispatcher::dispatch_mode::DFCFS) {
-        PSP_OK(dpt.dispatch());
-    }
+    
+    PSP_OK(dpt.dispatch());
+     
 
     // Check if we got packets from the network
     if (udp_ctx->recv_packets() != EAGAIN) {
