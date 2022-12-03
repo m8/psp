@@ -1,5 +1,11 @@
 #include <psp/libos/persephone.hh>
 #include "rte_launch.h"
+#include <psp/dispatch.h>
+
+extern volatile struct networker_pointers_t networker_pointers;
+extern volatile struct worker_response worker_responses[MAX_WORKERS];
+extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+
 
 /***************** Worker methods ***************/
 int Worker::register_dpt(Worker &dpt) {
@@ -50,6 +56,9 @@ int Worker::register_dpt(Worker &dpt) {
 
 int Worker::app_work(int status, unsigned long payload) {
     // Grab the request
+
+
+
     PSP_OK(process_request(payload));
 
     // Enqueue response to outbound queue
@@ -85,6 +94,30 @@ int Worker::app_dequeue(unsigned long *payload) {
     return status;
 }
 
+void Worker::init_worker()
+{
+    worker_responses[1].flag = PROCESSED;
+
+    assert(worker_responses[this->worker_id].flag == PROCESSED);
+
+    printf("Worker response for worker %d is %d\n", this->worker_id, worker_responses[this->worker_id].flag);
+    printf("Address of worker_responses is %p\n", worker_responses);
+}
+
+// TODO Should be inline
+static void finish_request(int worker_id)
+{
+    worker_responses[worker_id].timestamp = dispatcher_requests[worker_id].timestamp;
+    worker_responses[worker_id].type = dispatcher_requests[worker_id].type;
+    worker_responses[worker_id].mbuf = dispatcher_requests[worker_id].mbuf;
+    worker_responses[worker_id].rnbl = nullptr;
+    worker_responses[worker_id].category = CONTEXT;
+
+    // TODO add preempted
+    worker_responses[worker_id].flag = FINISHED;
+}
+
+
 void Worker::main_loop(void *wrkr) {
     Worker *me = reinterpret_cast<Worker *>(wrkr);
     PSP_DEBUG("Setting up worker thread " << me->worker_id);
@@ -95,8 +128,13 @@ void Worker::main_loop(void *wrkr) {
     }
     me->started = true;
     PSP_INFO("Worker thread " << me->worker_id << " started");
-    //PSP_INFO("Worker thread " << worker_id << " started");
-    while (!me->terminate) {
+
+    me->init_worker();
+
+    // This is for networker
+    if(me->worker_id == 0)
+    {
+        while (!me->terminate) {
         unsigned long payload = 0;
         int status = me->dequeue(&payload);
         if (status == EAGAIN) {
@@ -107,7 +145,29 @@ void Worker::main_loop(void *wrkr) {
             PSP_ERROR("Worker " << me->worker_id << " work() error: " << work_status);
             return;
         }
+    }}
+    else 
+    { 
+        while (!me->terminate) 
+        {
+            while (dispatcher_requests[me->worker_id].flag == WAITING);
+            dispatcher_requests[me->worker_id].flag = WAITING;
+            if (dispatcher_requests[me->worker_id].category == PACKET)
+            {
+                printf("Worker %d received a packet\n", me->worker_id);
+                // handle_fake_new_packet();
+            }
+            else
+            {
+                printf("Worker %d received a request\n", me->worker_id);
+                // handle_context();
+            }
+
+            finish_request(me->worker_id);
+        }
     }
+
+    
     me->exited = true;
     PSP_INFO("Worker thread " << me->worker_id << " terminating")
     return;

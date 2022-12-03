@@ -4,6 +4,19 @@
 #include <psp/libos/su/NetSu.hh>
 #include <bitset>
 #include <math.h>
+#include <psp/dispatch.h>
+#include <queue>
+
+volatile struct networker_pointers_t networker_pointers;
+volatile struct worker_response worker_responses[MAX_WORKERS];
+volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+
+static uint64_t timestamps[MAX_WORKERS];
+static uint8_t preempt_check[MAX_WORKERS];
+
+// Vector additions
+std::queue<struct task> tskq_m_queue[CFG_MAX_PORTS];
+
 
 // To fill vtable entries
 int Dispatcher::process_request(unsigned long payload) {
@@ -56,25 +69,60 @@ inline int Dispatcher::push_to_rqueue(unsigned long req, RequestType *&rtype, ui
     }
 }
 
-// Dispatch handle_worker 
+static inline void dispatch_request(int i, uint64_t cur_time)
+{
+    if(tskq_m_queue->empty())
+    {
+        return;
+    }
 
+    struct task & ret = tskq_m_queue->front();
+
+    printf("Dispatching request %d \n", i);
+    worker_responses[i].flag = RUNNING;
+    dispatcher_requests[i].rnbl = ret.runnable;
+    dispatcher_requests[i].mbuf = ret.mbuf;
+    dispatcher_requests[i].type = ret.type;
+    dispatcher_requests[i].category = ret.category;
+    dispatcher_requests[i].timestamp = ret.timestamp;
+    timestamps[i] = cur_time;
+    preempt_check[i] = true;
+    dispatcher_requests[i].flag = ACTIVE;
+}
+
+
+// Dispatch handle_worker 
 int Dispatcher::dispatch() {
+    
     uint64_t cur_tsc = rdtscp(NULL);
     
-    /* Check for work completion signals */
-    unsigned long notif;
     //FIXME: only circulate through busy peers?
-    for (uint32_t i = 0; i < n_peers; ++i) {
-        if (lrpc_ctx.pop(&notif, i) == 0) {
-            signal_free_worker(i, notif);
+    for (uint32_t i = 1; i < n_peers + 1 ; i ++) {
+        // if (lrpc_ctx.pop(&notif, i) == 0) {
+        //     signal_free_worker(i, notif);
+        // }
+
+        if (worker_responses[i].flag != RUNNING) {
+            if (worker_responses[i].flag == FINISHED) {
+                // handle_finished(i);
+            } else if (worker_responses[i].flag == PREEMPTED) {
+                // handle_preempted(i);
+            }
+            dispatch_request(i, cur_tsc);
+        } 
+        else {
+            // printf("Worker %d is still running \n", i);
+            // preempt_worker(i, cur_time);
         }
     }
 
     /* Dispatch from the queues to workers */
-    drain_queue(rtypes[type_to_nsorder[static_cast<int>(ReqType::UNKNOWN)]]);
+    // drain_queue(rtypes[type_to_nsorder[static_cast<int>(ReqType::UNKNOWN)]]);
     
     return 0;
 }
+
+
 
 int Dispatcher::drain_queue(RequestType *&rtype) {
     uint64_t cur_tsc = rdtscp(NULL);

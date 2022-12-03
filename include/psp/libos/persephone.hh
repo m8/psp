@@ -67,11 +67,14 @@ class Worker {
         bool started = false, exited = false;
         std::thread worker_thread;
         static void main_loop(void *wrkr);
+        void init_worker();
         // Functions to overload in child classes
         virtual int dequeue(unsigned long *payload) = 0;
         virtual int setup() = 0;
         virtual int work(int status, unsigned long payload) = 0;
         virtual int process_request(unsigned long payload) = 0;
+
+        
     protected:
         template <typename T> int drain_queue(T &rqueue);
         int app_work(int status, unsigned long payload);

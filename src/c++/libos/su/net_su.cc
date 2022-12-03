@@ -1,11 +1,12 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <psp/libos/su/NetSu.hh>
+#include <queue>
 #include <psp/dispatch.h>
 
 #define MAX_CLIENTS 64
 
-extern struct task_queue tskq[CFG_MAX_PORTS];
+extern std::queue<struct task> tskq_m_queue[CFG_MAX_PORTS];
 
 namespace po = boost::program_options;
 
@@ -44,9 +45,15 @@ int NetWorker::work(int status, unsigned long payload) {
 
         int * cont = nullptr;
         
-        tskq_enqueue_tail(&tskq[0], cont, (void *)req,
-                            0, PACKET, cur_tsc);      
-
+        const struct task tsk = {
+            .runnable = (void *)req,
+            .mbuf = nullptr,
+            .type = 0,
+            .category = 0,
+            .timestamp = cur_tsc,
+        };
+       
+        tskq_m_queue->push(tsk);
         printf("Enqueued packet\n");      
         
         if (ret == EXFULL or ret == ENOENT) {
@@ -77,6 +84,5 @@ int NetWorker::fake_work(int status)
 
     udp_ctx->inbound_queue[udp_ctx->pop_head++ & (INBOUND_Q_LEN - 1)] = (unsigned long) (void *) mbuf;
 
-    printf("Pushed packet\n");
     return 0;
 }

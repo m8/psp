@@ -12,31 +12,6 @@
 #define UPDATE_PERIOD 5 * 1e3 //5 usec
 #define MAX_WINDOWS 8192
 
-// struct worker_response
-// {
-//         uint64_t flag;
-//         void * rnbl;
-//         void * mbuf;
-//         uint64_t timestamp;
-//         uint8_t type;
-//         uint8_t category;
-//         char make_it_64_bytes[30];
-// } __attribute__((packed, aligned(64)));
-
-// struct dispatcher_request
-// {
-//         uint64_t flag;
-//         void * rnbl;
-//         void * mbuf;
-//         uint8_t type;
-//         uint8_t category;
-//         uint64_t timestamp;
-//         char make_it_64_bytes[30];
-// } __attribute__((packed, aligned(64)));
-
-// volatile struct worker_response worker_responses[MAX_WORKERS];
-// volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
-
 class Dispatcher : public Worker {
     /* Dispatch mode */
     public: enum dispatch_mode {

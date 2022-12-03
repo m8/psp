@@ -23,5 +23,5 @@ network:
 requests:
 - type: SHORT
 workers:
-  number: 2
+  number: 1
   type: MB

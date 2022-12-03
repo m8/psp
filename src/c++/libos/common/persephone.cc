@@ -11,6 +11,8 @@
 #include <psp/libos/su/DispatchSu.hh>
 #include <psp/libos/su/RocksdbSu.hh>
 #include <psp/annot.h>
+#include <psp/dispatch.h>
+
 
 std::string log_dir = "./";
 std::string label = "PspApp";
@@ -26,6 +28,8 @@ Psp::Psp(std::string &app_cfg, std::string l) {
     label = l;
     /* Let network libOS init its specific EAL */
     dpdk_net_init(app_cfg.c_str());
+
+    PSP_INFO("Taskqueue created\n");
 
     /* Parse the configuration */
     try {

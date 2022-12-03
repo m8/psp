@@ -19,7 +19,7 @@ int main (int argc, char *argv[]) {
         log_error("can't catch SIGTERM");
 
     /* Start all workers */
-    for (unsigned int i = 0; i < 2; ++i) {
+    for (unsigned int i = 0; i < total_workers ; ++i) {
         if (workers[i]->launch() != 0) {
             app.psp->stop_all(SIGTERM);
             break;
