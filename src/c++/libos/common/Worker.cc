@@ -154,7 +154,7 @@ void Worker::main_loop(void *wrkr) {
             dispatcher_requests[me->worker_id].flag = WAITING;
             if (dispatcher_requests[me->worker_id].category == PACKET)
             {
-                printf("Worker %d received a packet\n", me->worker_id);
+                printf("Worker: %d received a packet\n", me->worker_id);
                 // handle_fake_new_packet();
             }
             else

@@ -88,7 +88,20 @@ static inline void dispatch_request(int i, uint64_t cur_time)
     timestamps[i] = cur_time;
     preempt_check[i] = true;
     dispatcher_requests[i].flag = ACTIVE;
+
+    tskq_m_queue->pop();
 }
+
+static void handle_finished(int i)
+{    
+    // context_free(worker_responses[i].rnbl);
+    // mbuf_enqueue(&mqueue, (struct mbuf *) worker_responses[i].mbuf);
+    printf("Finished request %d \n", i);
+
+    preempt_check[i] = false;
+    worker_responses[i].flag = PROCESSED;
+}
+
 
 
 // Dispatch handle_worker 
@@ -104,8 +117,9 @@ int Dispatcher::dispatch() {
 
         if (worker_responses[i].flag != RUNNING) {
             if (worker_responses[i].flag == FINISHED) {
-                // handle_finished(i);
-            } else if (worker_responses[i].flag == PREEMPTED) {
+                handle_finished(i);
+            } 
+            else if (worker_responses[i].flag == PREEMPTED) {
                 // handle_preempted(i);
             }
             dispatch_request(i, cur_tsc);
@@ -118,7 +132,6 @@ int Dispatcher::dispatch() {
 
     /* Dispatch from the queues to workers */
     // drain_queue(rtypes[type_to_nsorder[static_cast<int>(ReqType::UNKNOWN)]]);
-    
     return 0;
 }
 
