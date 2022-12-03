@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <ucontext.h>
 #include <stdio.h>
-#include "mempool.h"
+
 
 #define WAITING     0x00
 #define ACTIVE      0x01
@@ -52,22 +52,6 @@
 #define ETH_DEV_TX_QUEUE_SZ     4096
 #define ETH_RX_MAX_DEPTH	32768
 #define ETH_RX_MAX_BATCH        6
-
-extern struct mempool_datastore task_datastore;
-extern struct mempool task_mempool __attribute((aligned(64)));
-extern struct mempool_datastore mcell_datastore;
-extern struct mempool mcell_mempool __attribute((aligned(64)));
-
-
-struct task
-{
-	void * runnable;
-    void * mbuf;
-	uint8_t type;
-	uint8_t category;
-	uint64_t timestamp;
-};
-
 
 struct worker_response
 {
@@ -109,19 +93,6 @@ struct mbuf_queue {
         struct mbuf_cell * head;
 };
 
-struct task_queue
-{
-        struct task * head;
-        struct task * tail;
-};
-        
-static inline uint64_t get_queue_timestamp(struct task_queue * tq, uint64_t * timestamp)
-{
-        if (tq->head == NULL)
-            return -1;
-        (*timestamp) = tq->head->timestamp;
-        return 0;
-}
 
 #define TASK_CAPACITY    (768*1024)
 #define MCELL_CAPACITY   (768*1024)

@@ -6,6 +6,8 @@
 #include <math.h>
 #include <psp/dispatch.h>
 #include <queue>
+#include <base/mempool.h>
+#include <psp/taskqueue.h>
 
 volatile struct networker_pointers_t networker_pointers;
 volatile struct worker_response worker_responses[MAX_WORKERS];
@@ -15,8 +17,14 @@ static uint64_t timestamps[MAX_WORKERS];
 static uint8_t preempt_check[MAX_WORKERS];
 
 // Vector additions
-std::queue<struct task> tskq_m_queue[CFG_MAX_PORTS];
+// std::queue<struct task> tskq_m_queue;
 
+struct mempool context_pool __attribute((aligned(64)));
+struct mempool stack_pool __attribute((aligned(64)));
+struct mempool task_mempool __attribute((aligned(64)));
+struct mempool mcell_mempool __attribute((aligned(64)));
+
+struct task_queue tskq[CFG_MAX_PORTS];
 
 // To fill vtable entries
 int Dispatcher::process_request(unsigned long payload) {
@@ -71,25 +79,36 @@ inline int Dispatcher::push_to_rqueue(unsigned long req, RequestType *&rtype, ui
 
 static inline void dispatch_request(int i, uint64_t cur_time)
 {
-    if(tskq_m_queue->empty())
+    // if(tskq_m_queue.empty())
+    // {
+    //     return;
+    // }
+
+    // struct task & ret = tskq_m_queue.front();
+    void * runnable, * mbuf;
+    uint8_t type, category;
+    uint64_t timestamp;
+
+    int ret = smart_tskq_dequeue(tskq, &runnable, &mbuf, &type,
+                              &category, &timestamp, cur_time);
+    if(ret)
     {
         return;
     }
 
-    struct task & ret = tskq_m_queue->front();
 
     printf("Dispatching request %d \n", i);
     worker_responses[i].flag = RUNNING;
-    dispatcher_requests[i].rnbl = ret.runnable;
-    dispatcher_requests[i].mbuf = ret.mbuf;
-    dispatcher_requests[i].type = ret.type;
-    dispatcher_requests[i].category = ret.category;
-    dispatcher_requests[i].timestamp = ret.timestamp;
+    dispatcher_requests[i].rnbl = runnable;
+    dispatcher_requests[i].mbuf = mbuf;
+    dispatcher_requests[i].type = type;
+    dispatcher_requests[i].category = category;
+    dispatcher_requests[i].timestamp = timestamp;
     timestamps[i] = cur_time;
     preempt_check[i] = true;
     dispatcher_requests[i].flag = ACTIVE;
 
-    tskq_m_queue->pop();
+    // tskq_m_queue.pop();
 }
 
 static void handle_finished(int i)

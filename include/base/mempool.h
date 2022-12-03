@@ -6,6 +6,8 @@
 
 #include <base/stddef.h>
 #include <assert.h>
+#include <malloc.h>
+#include <string.h>
 
 struct mempool {
 	void			**free_items;
@@ -15,6 +17,8 @@ struct mempool {
 	size_t			len;
 	size_t			pgsize;
 	size_t			item_len;
+	size_t 			num_items;
+	size_t 			num_pages;
 };
 
 #ifdef DEBUG
@@ -37,7 +41,6 @@ static void *mempool_alloc(struct mempool *m)
 	if (unlikely(m->allocated >= m->capacity))
 		return NULL;
 	item = m->free_items[m->allocated++];
-	__mempool_alloc_debug_check(m, item);
 	return item;
 }
 
@@ -55,35 +58,61 @@ static inline void mempool_free(struct mempool *m, void *item)
 
 
 // =============== NEWLY ADDED ===============
-int mempool_create(struct mempool *m, void *buf, size_t len,
-			  size_t pgsize, size_t item_len)
+static int mempool_create(struct mempool *m, int n_elements, int element_siz)
 {
-	// Set the buffer, length, and item length for the memory pool
-	m->buf = buf;
-	m->len = len;
-	m->item_len = item_len;
+    printf("Check 1\n");
 
-	// Calculate the number of items that can fit in a page
-	size_t items_per_pg = pgsize / item_len;
+    // Check if the input arguments are valid
+    if (!m || n_elements <= 0 || element_siz <= 0) {
+        return -1; // Invalid input
+    }
 
-	// Set the page size and number of pages
-	m->pgsize = pgsize;
-	m->capacity = (len + items_per_pg - 1) / items_per_pg;
+    // Calculate the total size of the memory region
+    m->len = n_elements * element_siz;
+    m->pgsize = 0;
+    m->item_len = element_siz;
 
-	// Allocate memory for the free item list
-	m->free_items = (void**)malloc(m->capacity * sizeof(void*));
+    // Allocate memory for the memory pool
+    m->buf = malloc(m->len);
+    if (!m->buf) {
+        return -1; // Failed to allocate memory
+    }
 
-	// Initialize the free list with all the items in the memory pool
-	for (size_t i = 0; i < len; i += item_len) {
-		m->free_items[m->allocated++] = (char*)buf + i;
-	}
+    printf("Check 1\n");
+
+    // Calculate the number of items and pages in the memory pool
+    m->num_items = m->len / element_siz;
+    m->num_pages = 0;
+
+    // Allocate memory for the free list of items
+    m->free_items = (void**)malloc(m->num_items * sizeof(void*));
+    if (!m->free_items) {
+        free(m->buf);
+        return -1; // Failed to allocate memory for the free list
+    }
+
+    printf("Check 1\n");
+
+
+    // Initialize the free list of items
+    m->allocated = 0;
+    m->capacity = m->num_items;
+    void *p = m->buf;
+    for (size_t i = 0; i < m->num_items; i++) {
+        m->free_items[i] = p;
+        p=(char*)p + element_siz;
+    }
+
+    printf("Check 1\n");
+
+    return 0; // Success
 }
 
-void mempool_destroy(struct mempool *m)
+static void mempool_destroy(struct mempool *m)
 {
   // Free the memory for the free item list
-  free(m->free_items);
+  	free(m->free_items);
 
   // Clear the memory pool structure
-  memset(m, 0, sizeof(struct mempool));
+	memset(m, 0, sizeof(struct mempool));
 }

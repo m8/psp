@@ -3,10 +3,15 @@
 #include <psp/libos/su/NetSu.hh>
 #include <queue>
 #include <psp/dispatch.h>
+#include <psp/taskqueue.h>
 
 #define MAX_CLIENTS 64
 
 extern std::queue<struct task> tskq_m_queue[CFG_MAX_PORTS];
+extern struct task_queue tskq[CFG_MAX_PORTS];
+extern struct mempool context_pool __attribute((aligned(64)));
+extern struct mempool stack_pool __attribute((aligned(64)));
+
 
 namespace po = boost::program_options;
 
@@ -40,27 +45,20 @@ int NetWorker::work(int status, unsigned long payload) {
     while (udp_ctx->pop_head > udp_ctx->pop_tail and batch_dequeued < MAX_RX_BURST) {
 
         unsigned long req = udp_ctx->inbound_queue[udp_ctx->pop_tail & (INBOUND_Q_LEN - 1)];
-        
-        int ret = 0;
+        struct mbuf *mbuf = (struct mbuf *)req;
 
-        int * cont = nullptr;
-        
-        const struct task tsk = {
-            .runnable = (void *)req,
-            .mbuf = nullptr,
-            .type = 0,
-            .category = 0,
-            .timestamp = cur_tsc,
-        };
-       
-        tskq_m_queue->push(tsk);
-        printf("Enqueued packet\n");      
-        
-        if (ret == EXFULL or ret == ENOENT) {
-            // Free the request because we can't enqueue it
-            PSP_OK(udp_ctx->free_mbuf(req));
-            //break;
+        ucontext_t *cont;
+        int ret = context_alloc(&cont);
+        if (unlikely(ret))
+        {
+            printf("Cannot allocate context\n");
+            // mbuf_enqueue(&mqueue, (struct mbuf *)networker_pointers.pkts[i]);
+            continue;
         }
+
+        tskq_enqueue_tail(&tskq[0], cont, mbuf, 1, 1, cur_tsc);
+
+        printf("Enqueued packet %d\n", batch_dequeued);
 
         udp_ctx->pop_tail++;
         batch_dequeued++;

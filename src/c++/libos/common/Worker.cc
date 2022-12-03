@@ -6,6 +6,8 @@ extern volatile struct networker_pointers_t networker_pointers;
 extern volatile struct worker_response worker_responses[MAX_WORKERS];
 extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
 
+__thread ucontext_t uctx_main;
+__thread ucontext_t *cont;
 
 /***************** Worker methods ***************/
 int Worker::register_dpt(Worker &dpt) {
@@ -118,6 +120,29 @@ static void finish_request(int worker_id)
 }
 
 
+// static inline void handle_fake_new_packet(int worker_id)
+// {
+//     int ret;
+//     struct mbuf *pkt;
+//     struct custom_payload *req;
+
+//     pkt = (struct mbuf *)dispatcher_requests[worker_id].mbuf;
+
+//     cont = (struct ucontext_t *)dispatcher_requests[worker_id].rnbl;
+//     getcontext_fast(cont);
+//     set_context_link(cont, &uctx_main);
+//     makecontext(cont, (void (*)(void))simple_generic_work, 2, req->ns, req->id);
+
+//     finished = false;
+//     ret = swapcontext_very_fast(&uctx_main, cont);
+//     if (ret)
+//     {
+//         log_err("Failed to do swap into new context\n");
+//         exit(-1);
+//     }
+// }
+
+
 void Worker::main_loop(void *wrkr) {
     Worker *me = reinterpret_cast<Worker *>(wrkr);
     PSP_DEBUG("Setting up worker thread " << me->worker_id);
@@ -155,7 +180,7 @@ void Worker::main_loop(void *wrkr) {
             if (dispatcher_requests[me->worker_id].category == PACKET)
             {
                 printf("Worker: %d received a packet\n", me->worker_id);
-                // handle_fake_new_packet();
+                handle_fake_new_packet();
             }
             else
             {
