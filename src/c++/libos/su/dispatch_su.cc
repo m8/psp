@@ -89,8 +89,8 @@ static inline void dispatch_request(int i, uint64_t cur_time)
     uint8_t type, category;
     uint64_t timestamp;
 
-    int ret = smart_tskq_dequeue(tskq, &runnable, &mbuf, &type,
-                              &category, &timestamp, cur_time);
+    int ret = tskq_dequeue(tskq, &runnable, &mbuf, &type,
+                              &category, &timestamp);
     if(ret)
     {
         return;
@@ -107,8 +107,6 @@ static inline void dispatch_request(int i, uint64_t cur_time)
     timestamps[i] = cur_time;
     preempt_check[i] = true;
     dispatcher_requests[i].flag = ACTIVE;
-
-    // tskq_m_queue.pop();
 }
 
 static void handle_finished(int i)
@@ -121,6 +119,24 @@ static void handle_finished(int i)
     worker_responses[i].flag = PROCESSED;
 }
 
+static inline void handle_preempted(int i)
+{
+	void *rnbl, *mbuf;
+	uint8_t type, category;
+	uint64_t timestamp, runned_for;
+
+	rnbl = worker_responses[i].rnbl;
+	mbuf = worker_responses[i].mbuf;
+	category = worker_responses[i].category;
+	type = worker_responses[i].type;
+	timestamp = worker_responses[i].timestamp;
+	
+    tskq_enqueue_tail(&tskq[0], rnbl, mbuf, type, category, timestamp);
+
+    printf("Preempted request %d \n", i);
+	preempt_check[i] = false;
+	worker_responses[i].flag = PROCESSED;
+}
 
 
 // Dispatch handle_worker 
@@ -139,7 +155,7 @@ int Dispatcher::dispatch() {
                 handle_finished(i);
             } 
             else if (worker_responses[i].flag == PREEMPTED) {
-                // handle_preempted(i);
+                handle_preempted(i);
             }
             dispatch_request(i, cur_tsc);
         } 

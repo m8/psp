@@ -1,5 +1,6 @@
 cmake_minimum_required (VERSION 3.5.1)
-project (Persephone C CXX)
+project (Persephone 
+         LANGUAGES C CXX ASM)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake")
 

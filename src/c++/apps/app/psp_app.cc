@@ -29,7 +29,7 @@ int main (int argc, char *argv[]) {
     PSP_INFO("Sending fake packets\n");
 
     // Fake packets
-    for (int k = 0; k < 10; k++)
+    for (int k = 0; k < 3; k++)
     {
         net_worker->fake_work(1);
     } 

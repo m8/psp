@@ -1,13 +1,23 @@
 #include <psp/libos/persephone.hh>
 #include "rte_launch.h"
 #include <psp/dispatch.h>
+#include <psp/taskqueue.h>
 
 extern volatile struct networker_pointers_t networker_pointers;
 extern volatile struct worker_response worker_responses[MAX_WORKERS];
 extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
 
+extern "C"  {
+extern int getcontext_fast(ucontext_t *ucp);
+extern int swapcontext_fast(ucontext_t *ouctx, ucontext_t *uctx);
+extern int swapcontext_fast_to_control(ucontext_t *ouctx, ucontext_t *uctx);
+extern int swapcontext_very_fast(ucontext_t *ouctx, ucontext_t *uctx);
+}
+
 __thread ucontext_t uctx_main;
 __thread ucontext_t *cont;
+__thread volatile uint8_t finished;
+
 
 /***************** Worker methods ***************/
 int Worker::register_dpt(Worker &dpt) {
@@ -112,35 +122,77 @@ static void finish_request(int worker_id)
     worker_responses[worker_id].timestamp = dispatcher_requests[worker_id].timestamp;
     worker_responses[worker_id].type = dispatcher_requests[worker_id].type;
     worker_responses[worker_id].mbuf = dispatcher_requests[worker_id].mbuf;
-    worker_responses[worker_id].rnbl = nullptr;
+    worker_responses[worker_id].rnbl = cont;
     worker_responses[worker_id].category = CONTEXT;
 
-    // TODO add preempted
-    worker_responses[worker_id].flag = FINISHED;
+    if(finished == true)
+    {
+        worker_responses[worker_id].flag = FINISHED;
+    }
+    else 
+    {
+        worker_responses[worker_id].flag = PREEMPTED;
+    }
 }
 
+void simple_generic_work(int l)
+{
+    int k = 0;
 
-// static inline void handle_fake_new_packet(int worker_id)
-// {
-//     int ret;
-//     struct mbuf *pkt;
-//     struct custom_payload *req;
+    for(int i = 0; i < 4; i++)
+    {
+        if(k == 2)
+        {
+            swapcontext_fast_to_control(cont, &uctx_main);
+        }
 
-//     pkt = (struct mbuf *)dispatcher_requests[worker_id].mbuf;
+        k++;
+        printf("k is %d\n", k);
+    }   
 
-//     cont = (struct ucontext_t *)dispatcher_requests[worker_id].rnbl;
-//     getcontext_fast(cont);
-//     set_context_link(cont, &uctx_main);
-//     makecontext(cont, (void (*)(void))simple_generic_work, 2, req->ns, req->id);
+    finished = true;
+    swapcontext_fast_to_control(cont, &uctx_main);
+}
 
-//     finished = false;
-//     ret = swapcontext_very_fast(&uctx_main, cont);
-//     if (ret)
-//     {
-//         log_err("Failed to do swap into new context\n");
-//         exit(-1);
-//     }
-// }
+static inline void handle_fake_new_packet(int worker_id)
+{
+    int ret;
+    struct mbuf *pkt;
+    struct custom_payload *req;
+
+    pkt = (struct mbuf *)dispatcher_requests[worker_id].mbuf;
+
+    cont = (struct ucontext_t *)dispatcher_requests[worker_id].rnbl;
+    getcontext_fast(cont);
+    set_context_link(cont, &uctx_main);
+    makecontext(cont, (void (*)(void))simple_generic_work, 1, 1);
+
+    finished = false;
+
+    printf("Entering the context\n");
+    ret = swapcontext_very_fast(&uctx_main, cont);
+    if (ret)
+    {
+        printf("Failed to do swap into new context\n");
+        exit(-1);
+    }
+}
+
+static inline void handle_context(int worker_id)
+{
+    int ret;
+    finished = false;
+    cont = (struct ucontext_t*) dispatcher_requests[worker_id].rnbl;
+    set_context_link(cont, &uctx_main);
+    ret = swapcontext_fast(&uctx_main, cont);
+    
+    if (ret)
+    {
+        PSP_ERROR("Failed to swap to existing context\n");
+        exit(-1);
+    }
+}
+
 
 
 void Worker::main_loop(void *wrkr) {
@@ -179,13 +231,11 @@ void Worker::main_loop(void *wrkr) {
             dispatcher_requests[me->worker_id].flag = WAITING;
             if (dispatcher_requests[me->worker_id].category == PACKET)
             {
-                printf("Worker: %d received a packet\n", me->worker_id);
-                handle_fake_new_packet();
+                handle_fake_new_packet(me->worker_id);
             }
             else
             {
-                printf("Worker %d received a request\n", me->worker_id);
-                // handle_context();
+                handle_context(me->worker_id);
             }
 
             finish_request(me->worker_id);
