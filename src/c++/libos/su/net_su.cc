@@ -4,6 +4,7 @@
 #include <queue>
 #include <psp/dispatch.h>
 #include <psp/taskqueue.h>
+#include <psp/bench_concord.h>
 
 #define MAX_CLIENTS 64
 
@@ -12,6 +13,13 @@ extern struct task_queue tskq[CFG_MAX_PORTS];
 extern struct mempool context_pool __attribute((aligned(64)));
 extern struct mempool stack_pool __attribute((aligned(64)));
 
+extern volatile uint64_t TEST_START_TIME;
+extern volatile uint64_t TEST_END_TIME;
+extern volatile uint64_t TEST_RCVD_SMALL_PACKETS;
+extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
+extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
+extern volatile bool     TEST_FINISHED;
+extern volatile bool IS_FIRST_PACKET;
 
 namespace po = boost::program_options;
 
@@ -34,7 +42,17 @@ int NetWorker::process_request(unsigned long payload) {
 
 int NetWorker::work(int status, unsigned long payload) {
     // Dispatch enqueued requests
-    
+
+    if (IS_FIRST_PACKET && (TEST_FINISHED || ((get_us() - TEST_START_TIME) > BENCHMARK_DURATION_US )))
+    {
+        printf("\n\n ----------- Benchmark FINISHED ----------- \n");
+        printf("Benchmark - Total number of packets %d \n", TEST_TOTAL_PACKETS_COUNTER);
+        printf("Benchmark - %d big, %d small packets\n", TEST_RCVD_BIG_PACKETS, TEST_RCVD_SMALL_PACKETS);
+        printf("Benchmark - Time ellapsed: %llu\n", TEST_END_TIME - TEST_START_TIME);
+        // printf("Benchmark - Total scheduled times: %d\n", total_scheduled);
+        return 1;
+    }
+
     PSP_OK(dpt.dispatch());
 
     uint64_t cur_tsc = rdtscp(NULL);
@@ -68,12 +86,30 @@ int NetWorker::work(int status, unsigned long payload) {
     return 0;
 }
 
-int NetWorker::fake_work(int status)
+int NetWorker::sent_fake_packet()
 {
-    uint64_t cur_tsc = rdtscp(NULL);
     // create mbuf
     struct rte_mbuf *mbuf = rte_pktmbuf_alloc(udp_ctx->mbuf_pool);
-    
+
+    // create packet
+    struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
+    struct rte_ipv4_hdr *ip_hdr = (struct rte_ipv4_hdr *)(eth_hdr + 1);
+    struct rte_udp_hdr *udp_hdr = (struct rte_udp_hdr *)(ip_hdr + 1);
+    char *payload = (char *)(udp_hdr + 1);
+
+    struct db_req *req = (struct db_req *)payload;
+
+    #if BENCHMARK_TYPE == 0
+	req->type = DB_ITERATOR; 
+	#elif BENCHMARK_TYPE == 1
+	req-> type = (rand() % 2) ? DB_GET : DB_ITERATOR;
+	#elif BENCHMARK_TYPE == 2
+	req-> type = (rand() % 1000) < 995 ? DB_GET : DB_ITERATOR;
+	#else
+    assert(0 && "Unknown benchmark type, quitting");
+	#endif
+
+
     if (unlikely(mbuf == NULL))
     {
         PSP_ERROR("Failed to allocate mbuf");

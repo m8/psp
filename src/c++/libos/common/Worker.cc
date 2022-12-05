@@ -2,21 +2,36 @@
 #include "rte_launch.h"
 #include <psp/dispatch.h>
 #include <psp/taskqueue.h>
+#include <psp/bench_concord.h>
+
+#define PSP_UNLIKELY(Cond) __builtin_expect((Cond), 0)
+#define PSP_LIKELY(Cond) __builtin_expect((Cond), 1)
+
 
 extern volatile struct networker_pointers_t networker_pointers;
 extern volatile struct worker_response worker_responses[MAX_WORKERS];
 extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
 
-extern "C"  {
-extern int getcontext_fast(ucontext_t *ucp);
-extern int swapcontext_fast(ucontext_t *ouctx, ucontext_t *uctx);
-extern int swapcontext_fast_to_control(ucontext_t *ouctx, ucontext_t *uctx);
-extern int swapcontext_very_fast(ucontext_t *ouctx, ucontext_t *uctx);
+extern "C"  
+{
+    extern int getcontext_fast(ucontext_t *ucp);
+    extern int swapcontext_fast(ucontext_t *ouctx, ucontext_t *uctx);
+    extern int swapcontext_fast_to_control(ucontext_t *ouctx, ucontext_t *uctx);
+    extern int swapcontext_very_fast(ucontext_t *ouctx, ucontext_t *uctx);
 }
 
 __thread ucontext_t uctx_main;
 __thread ucontext_t *cont;
 __thread volatile uint8_t finished;
+
+
+extern volatile uint64_t TEST_START_TIME;
+extern volatile uint64_t TEST_END_TIME;
+extern volatile uint64_t TEST_RCVD_SMALL_PACKETS;
+extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
+extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
+extern volatile bool     TEST_FINISHED;
+extern bool IS_FIRST_PACKET;
 
 
 /***************** Worker methods ***************/
@@ -68,9 +83,6 @@ int Worker::register_dpt(Worker &dpt) {
 
 int Worker::app_work(int status, unsigned long payload) {
     // Grab the request
-
-
-
     PSP_OK(process_request(payload));
 
     // Enqueue response to outbound queue
@@ -135,7 +147,7 @@ static void finish_request(int worker_id)
     }
 }
 
-void simple_generic_work(int l)
+void simple_generic_work(struct db_req* req)
 {
     int k = 0;
 
@@ -147,8 +159,24 @@ void simple_generic_work(int l)
         }
 
         k++;
-        printf("k is %d\n", k);
     }   
+
+
+    TEST_TOTAL_PACKETS_COUNTER += 1;
+
+    if (TEST_TOTAL_PACKETS_COUNTER == BENCHMARK_STOP_AT_PACKET)
+    {
+        TEST_END_TIME = get_us();
+        TEST_FINISHED = true;
+    }
+
+    if (req->type == DB_GET || req->type == DB_PUT){
+        TEST_RCVD_SMALL_PACKETS += 1;
+    }
+    else
+    {
+        TEST_RCVD_BIG_PACKETS += 1;
+    }
 
     finished = true;
     swapcontext_fast_to_control(cont, &uctx_main);
@@ -157,19 +185,21 @@ void simple_generic_work(int l)
 static inline void handle_fake_new_packet(int worker_id)
 {
     int ret;
-    struct mbuf *pkt;
-    struct custom_payload *req;
+    struct rte_mbuf *pkt;
+    struct db_req* req;
 
-    pkt = (struct mbuf *)dispatcher_requests[worker_id].mbuf;
+    pkt = (struct rte_mbuf *)dispatcher_requests[worker_id].mbuf;
+    req = (struct db_req *)rte_pktmbuf_mtod_offset(pkt, struct rte_mbuf *, NET_HDR_SIZE);
+
+    // printf("Worker %d received request type %d\n", worker_id, req->type);
 
     cont = (struct ucontext_t *)dispatcher_requests[worker_id].rnbl;
     getcontext_fast(cont);
     set_context_link(cont, &uctx_main);
-    makecontext(cont, (void (*)(void))simple_generic_work, 1, 1);
+    makecontext(cont, (void (*)(void))simple_generic_work, 1, req);
 
     finished = false;
 
-    printf("Entering the context\n");
     ret = swapcontext_very_fast(&uctx_main, cont);
     if (ret)
     {
@@ -231,6 +261,11 @@ void Worker::main_loop(void *wrkr) {
             dispatcher_requests[me->worker_id].flag = WAITING;
             if (dispatcher_requests[me->worker_id].category == PACKET)
             {
+                if (PSP_UNLIKELY(!IS_FIRST_PACKET))
+                {
+                    TEST_START_TIME = get_us();
+                    IS_FIRST_PACKET = true;
+                }
                 handle_fake_new_packet(me->worker_id);
             }
             else

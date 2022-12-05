@@ -25,7 +25,7 @@ class NetWorker : public Worker {
     private: int setup() override;
     private: int work(int status, unsigned long payload) override;
     private: int dequeue(unsigned long *payload);
-    public: int fake_work(int status);
+    public: int sent_fake_packet();
 
     public: NetWorker(bool is_echo)
             : Worker(WorkerType::NET),

@@ -24,6 +24,15 @@ struct mempool stack_pool __attribute((aligned(64)));
 struct mempool task_mempool __attribute((aligned(64)));
 struct mempool mcell_mempool __attribute((aligned(64)));
 
+volatile uint64_t TEST_START_TIME = 0;
+volatile uint64_t TEST_END_TIME = 0;
+volatile uint64_t TEST_RCVD_SMALL_PACKETS = 0;
+volatile uint64_t TEST_RCVD_BIG_PACKETS = 0;
+volatile uint64_t TEST_TOTAL_PACKETS_COUNTER = 0; 
+volatile bool     TEST_FINISHED = false;
+volatile bool IS_FIRST_PACKET = false;
+
+
 struct task_queue tskq[CFG_MAX_PORTS];
 
 // To fill vtable entries
@@ -96,8 +105,6 @@ static inline void dispatch_request(int i, uint64_t cur_time)
         return;
     }
 
-
-    printf("Dispatching request %d \n", i);
     worker_responses[i].flag = RUNNING;
     dispatcher_requests[i].rnbl = runnable;
     dispatcher_requests[i].mbuf = mbuf;
@@ -111,9 +118,8 @@ static inline void dispatch_request(int i, uint64_t cur_time)
 
 static void handle_finished(int i)
 {    
-    // context_free(worker_responses[i].rnbl);
-    // mbuf_enqueue(&mqueue, (struct mbuf *) worker_responses[i].mbuf);
-    printf("Finished request %d \n", i);
+    context_free((ucontext_t *) worker_responses[i].rnbl);
+    rte_pktmbuf_free((rte_mbuf *) worker_responses[i].mbuf);
 
     preempt_check[i] = false;
     worker_responses[i].flag = PROCESSED;

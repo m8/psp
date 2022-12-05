@@ -1,8 +1,11 @@
 #include "psp_app.hh"
+#include <psp/bench_concord.h>
 
 #include <csignal>
 
 extern NetWorker * net_worker;
+
+
 
 int main (int argc, char *argv[]) {
     if (TRACE)
@@ -29,10 +32,27 @@ int main (int argc, char *argv[]) {
     PSP_INFO("Sending fake packets\n");
 
     // Fake packets
-    for (int k = 0; k < 3; k++)
+    if(BENCHMARK_CREATE_NO_PACKET != -1)
     {
-        net_worker->fake_work(1);
-    } 
+        for (int i = 0; i < BENCHMARK_CREATE_NO_PACKET; i++) {
+            net_worker->sent_fake_packet();
+        }
+    }
+    else
+    {
+        long long start_time = get_us();
+        while(1)
+        {   
+            if(get_us() - start_time > BENCHMARK_DURATION_US)
+            {
+                printf("Done sending packets - Time Exceed\n");
+                break;
+            }
+
+            net_worker->sent_fake_packet();
+        }
+    }
+
 
     /* Join threads */
     for (unsigned int i = 0; i < total_workers; ++i) {
