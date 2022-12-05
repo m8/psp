@@ -16,6 +16,8 @@ volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
 static uint64_t timestamps[MAX_WORKERS];
 static uint8_t preempt_check[MAX_WORKERS];
 
+volatile int * cpu_preempt_points [MAX_WORKERS] = {NULL};
+
 // Vector additions
 // std::queue<struct task> tskq_m_queue;
 
@@ -139,11 +141,19 @@ static inline void handle_preempted(int i)
 	
     tskq_enqueue_tail(&tskq[0], rnbl, mbuf, type, category, timestamp);
 
-    printf("Preempted request %d \n", i);
 	preempt_check[i] = false;
 	worker_responses[i].flag = PROCESSED;
 }
 
+static inline void preempt_worker(uint8_t i, uint64_t cur_time)
+{
+	if (preempt_check[i] && (((cur_time - timestamps[i]) / 3.3) > 5000))
+	{
+		// Avoid preempting more times.
+		preempt_check[i] = false;
+        *(cpu_preempt_points[i]) = 1;
+	}
+}
 
 // Dispatch handle_worker 
 int Dispatcher::dispatch() {
@@ -167,7 +177,9 @@ int Dispatcher::dispatch() {
         } 
         else {
             // printf("Worker %d is still running \n", i);
-            // preempt_worker(i, cur_time);
+            // #if (SCHEDULE_METHOD == METHOD_CONCORD)
+            // preempt_worker(i, cur_tsc);
+            // #endif
         }
     }
 

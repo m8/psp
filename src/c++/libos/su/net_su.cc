@@ -76,8 +76,6 @@ int NetWorker::work(int status, unsigned long payload) {
 
         tskq_enqueue_tail(&tskq[0], cont, mbuf, 1, 1, cur_tsc);
 
-        printf("Enqueued packet %d\n", batch_dequeued);
-
         udp_ctx->pop_tail++;
         batch_dequeued++;
     }

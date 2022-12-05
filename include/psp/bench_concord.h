@@ -24,13 +24,13 @@ struct db_req
     uint64_t ts;
 } __attribute__((packed));
 
-#define BENCHMARK_STOP_AT_PACKET     100
+#define BENCHMARK_STOP_AT_PACKET     1000
 #define BENCHMARK_DURATION_US        1000000 * 60 
 #define SCHEDULE_METHOD              METHOD_NONE
 #define DB_NUM_KEYS                  15000
 
 // Set to -1 to run in infinite loop
-#define BENCHMARK_CREATE_NO_PACKET   100
+#define BENCHMARK_CREATE_NO_PACKET   200*5
 
 // Schedule Methods
 #define METHOD_NONE     0
@@ -40,13 +40,13 @@ struct db_req
 #define LATENCY_DEBUG   1
 
 // If 0, runs leveldb. If 1 runs simpleloop
-#define RUN_UBENCH      0  
+#define RUN_UBENCH      1  
 
 
 
 #if RUN_UBENCH == 1
     // Different workload mixes 
-    #define BENCHMARK_TYPE    0 
+    #define BENCHMARK_TYPE    0
     #if BENCHMARK_TYPE == 0                      // 100% 100us.
     #define BENCHMARK_SMALL_PKT_SPIN   62   
     #define BENCHMARK_SMALL_PKT_NS     1000

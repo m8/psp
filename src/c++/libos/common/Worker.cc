@@ -7,7 +7,6 @@
 #define PSP_UNLIKELY(Cond) __builtin_expect((Cond), 0)
 #define PSP_LIKELY(Cond) __builtin_expect((Cond), 1)
 
-
 extern volatile struct networker_pointers_t networker_pointers;
 extern volatile struct worker_response worker_responses[MAX_WORKERS];
 extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
@@ -18,6 +17,8 @@ extern "C"
     extern int swapcontext_fast(ucontext_t *ouctx, ucontext_t *uctx);
     extern int swapcontext_fast_to_control(ucontext_t *ouctx, ucontext_t *uctx);
     extern int swapcontext_very_fast(ucontext_t *ouctx, ucontext_t *uctx);
+
+    extern int simpleloop(int k);
 }
 
 __thread ucontext_t uctx_main;
@@ -32,6 +33,58 @@ extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
 extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
 extern volatile bool     TEST_FINISHED;
 extern bool IS_FIRST_PACKET;
+
+
+extern volatile int * cpu_preempt_points [MAX_WORKERS];
+
+extern "C"
+{
+    __thread int concord_preempt_now;
+    __thread int concord_lock_counter;
+
+    void concord_disable()
+    {
+        // printf("Disabling concord\n");
+        concord_lock_counter -= 1;
+    }
+
+    void concord_enable()
+    {
+        // printf("Enabling concord\n");
+        concord_lock_counter += 1;
+    }
+
+    void concord_func()
+    {
+        
+        if(concord_lock_counter != 0)
+        {
+            return;
+        }
+        printf("Concord func\n");
+        concord_preempt_now = 0;
+
+
+        /* Turn on to benchmark timeliness of yields */
+        // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
+        swapcontext_fast_to_control(cont, &uctx_main);
+    }
+
+     void concord_rdtsc_func()
+    {
+        
+        if(concord_lock_counter != 0)
+        {
+            return;
+        }
+        printf("Concord func\n");
+
+        /* Turn on to benchmark timeliness of yields */
+        // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
+        swapcontext_fast_to_control(cont, &uctx_main);
+    }
+}
+
 
 
 /***************** Worker methods ***************/
@@ -120,7 +173,9 @@ int Worker::app_dequeue(unsigned long *payload) {
 
 void Worker::init_worker()
 {
-    worker_responses[1].flag = PROCESSED;
+
+    cpu_preempt_points[this->worker_id] = &concord_preempt_now;
+    worker_responses[this->worker_id].flag = PROCESSED;
 
     assert(worker_responses[this->worker_id].flag == PROCESSED);
 
@@ -151,16 +206,38 @@ void simple_generic_work(struct db_req* req)
 {
     int k = 0;
 
-    for(int i = 0; i < 4; i++)
+    switch (req->type)
     {
-        if(k == 2)
-        {
-            swapcontext_fast_to_control(cont, &uctx_main);
-        }
+    case (DB_GET):
+    {
+        #if RUN_UBENCH == 1
+        simpleloop(BENCHMARK_SMALL_PKT_SPIN);
+        #else
+        // int read_len = VALSIZE;
+        // char* err;
+        // char *returned_value = cncrd_leveldb_get(db, roptions,
+        //                         db_pkg->key, KEYSIZE,
+        //                         &read_len, &err);
+        // if (err != NULL)
+		// {
+		// 	fprintf(stderr, "get fail. %s\n", db_pkg->key);
+		// }
+        #endif
+        break;
+    }
+    case (DB_ITERATOR):
+    {
+        #if RUN_UBENCH == 1
+        simpleloop(BENCHMARK_LARGE_PKT_SPIN); 
+        #else
+        // cncrd_leveldb_scan(db,roptions, 'musa');
+        #endif
 
-        k++;
-    }   
-
+        break;
+    }
+    default:
+        break;
+    }
 
     TEST_TOTAL_PACKETS_COUNTER += 1;
 

@@ -18,6 +18,15 @@ set(CMAKE_CXX_FLAGS_RELEASE ${RELEASE_CFLAGS})
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
+set(CONCORD_FAKE_WORK_DIR ${CMAKE_SOURCE_DIR}/../benchmarks/looplib/lib)
+add_library(fake-work-concord STATIC IMPORTED)
+set_target_properties(fake-work-concord PROPERTIES IMPORTED_LOCATION ${CONCORD_FAKE_WORK_DIR}/concord_loop.a)
+function(target_add_concord_fake_work TARGET)
+    target_include_directories(${TARGET} PUBLIC ${CONCORD_FAKE_WORK_DIR})
+    target_link_libraries(${TARGET} fake-work-concord)
+endfunction(target_add_concord_fake_work)
+
+
 set(FAKE_WORK_DIR ${CMAKE_SOURCE_DIR}/submodules/fake_work)
 add_library(fake-work SHARED IMPORTED GLOBAL)
 set_target_properties(fake-work PROPERTIES IMPORTED_LOCATION ${FAKE_WORK_DIR}/libfake.so)
