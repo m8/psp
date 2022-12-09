@@ -104,6 +104,7 @@ class Worker {
         int launch();
         bool has_exited() { return exited; }
         void stop() { terminate = true; }
+        void init_worker();
 
         Worker(enum WorkerType type);
         Worker(enum WorkerType type, int worker_id);
