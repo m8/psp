@@ -1,11 +1,12 @@
 cpus:
 - 2
 - 4
+- 6
 log_dir: /tmpfs/experiments/
 n_resas: 0
 net_workers:
 - dp: CFCFS
-  ip: 192.168.10.10
+  ip: 128.178.52.5
   is_echo: 0
   port: 6789
 network:
@@ -14,14 +15,14 @@ network:
   - -n
   - '2'
   - -l
-  - 0, 2, 4
+  - 0, 2, 4, 6
   - --file-prefix
   - maxdml
   - -w
   - '0000:83:00.1'
   mac: '90:e2:ba:55:12:24'
 requests:
-- type: SHORT
+- type: SHORT, LONG
 workers:
   number: 2
   type: MB
