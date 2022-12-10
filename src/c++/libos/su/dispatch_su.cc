@@ -4,6 +4,36 @@
 #include <psp/libos/su/NetSu.hh>
 #include <bitset>
 #include <math.h>
+#include <psp/dispatch.h>
+#include <base/mempool.h>
+#include <psp/taskqueue.h>
+
+volatile struct networker_pointers_t networker_pointers;
+volatile struct worker_response worker_responses[MAX_WORKERS];
+volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+
+static uint64_t timestamps[MAX_WORKERS];
+static uint8_t preempt_check[MAX_WORKERS];
+
+// Vector additions
+// std::queue<struct task> tskq_m_queue;
+
+struct mempool context_pool __attribute((aligned(64)));
+struct mempool stack_pool __attribute((aligned(64)));
+struct mempool task_mempool __attribute((aligned(64)));
+struct mempool mcell_mempool __attribute((aligned(64)));
+
+volatile uint64_t TEST_START_TIME = 0;
+volatile uint64_t TEST_END_TIME = 0;
+volatile uint64_t TEST_RCVD_SMALL_PACKETS = 0;
+volatile uint64_t TEST_RCVD_BIG_PACKETS = 0;
+volatile uint64_t TEST_TOTAL_PACKETS_COUNTER = 0; 
+volatile bool     TEST_FINISHED = false;
+volatile bool IS_FIRST_PACKET = false;
+
+
+struct task_queue tskq[1];
+
 
 // To fill vtable entries
 int Dispatcher::process_request(unsigned long payload) {
@@ -263,113 +293,94 @@ inline int Dispatcher::push_to_rqueue(unsigned long req, RequestType *&rtype, ui
     }
 }
 
+static inline void dispatch_request(int i, uint64_t cur_time)
+{
+    // if(tskq_m_queue.empty())
+    // {
+    //     return;
+    // }
+
+    // struct task & ret = tskq_m_queue.front();
+    void * runnable, * mbuf;
+    uint8_t type, category;
+    uint64_t timestamp;
+
+    int ret = tskq_dequeue(tskq, &runnable, &mbuf, &type,
+                              &category, &timestamp);
+    if(ret)
+    {
+        return;
+    }
+
+    worker_responses[i].flag = RUNNING;
+    dispatcher_requests[i].rnbl = runnable;
+    dispatcher_requests[i].mbuf = mbuf;
+    dispatcher_requests[i].type = type;
+    dispatcher_requests[i].category = category;
+    dispatcher_requests[i].timestamp = timestamp;
+    timestamps[i] = cur_time;
+    preempt_check[i] = true;
+    dispatcher_requests[i].flag = ACTIVE;
+}
+
+static void handle_finished(int i)
+{    
+    context_free((ucontext_t *) worker_responses[i].rnbl);
+    rte_pktmbuf_free((rte_mbuf *) worker_responses[i].mbuf);
+
+    preempt_check[i] = false;
+    worker_responses[i].flag = PROCESSED;
+}
+
+static inline void handle_preempted(int i)
+{
+	void *rnbl, *mbuf;
+	uint8_t type, category;
+	uint64_t timestamp, runned_for;
+
+	rnbl = worker_responses[i].rnbl;
+	mbuf = worker_responses[i].mbuf;
+	category = worker_responses[i].category;
+	type = worker_responses[i].type;
+	timestamp = worker_responses[i].timestamp;
+	
+    tskq_enqueue_tail(&tskq[0], rnbl, mbuf, type, category, timestamp);
+
+    printf("Preempted request %d \n", i);
+	preempt_check[i] = false;
+	worker_responses[i].flag = PROCESSED;
+}
+
 int Dispatcher::dispatch() {
+    
     uint64_t cur_tsc = rdtscp(NULL);
-    if (unlikely(not first_resa_done)) {
-        if (num_dped > RESA_SAMPLES_NEEDED) {
-            windows[n_windows].tsc_start = cur_tsc;
-            windows[n_windows].count = num_dped;
-            dp = DARC;
-            first_resa_done = true;
-            PSP_OK(update_darc());
-        }
-    //} else if ((cur_tsc - windows[n_windows].tsc) > update_frequency and windows[n_windows].count > RESA_SAMPLES_NEEDED) {
-    } else if (dp == DARC and likely(dynamic) and windows[n_windows].count > RESA_SAMPLES_NEEDED) {
-        for (uint32_t i = 0; i < n_rtypes; ++i) {
-            if ((rtypes[i]->rqueue_head - rtypes[i]->rqueue_tail) < 2)
-                continue;
-            uint64_t d = rtypes[i]->tsqueue[(rtypes[i]->rqueue_tail + 1) & (RQUEUE_LEN - 1)];
-            rtypes[i]->delay = cur_tsc - d;
-            if (rtypes[i]->delay > rtypes[i]->max_delay) {
-                PSP_DEBUG(
-                    "[UPDATE_PERIOD] updating type "
-                    << req_type_str[static_cast<int>(rtypes[i]->type)]
-                    << " because delay " << rtypes[i]->delay / cycles_per_ns
-                    << " is greater than " << rtypes[i]->max_delay / cycles_per_ns
-                );
-                PSP_OK(update_darc());
-                break;
-            }
-        }
-    }
-
-    /* Check for work completion signals */
-    unsigned long notif;
+    
     //FIXME: only circulate through busy peers?
-    for (uint32_t i = 0; i < n_peers; ++i) {
-        if (lrpc_ctx.pop(&notif, i) == 0) {
-            signal_free_worker(i, notif);
+    for (uint32_t i = 1; i < n_peers + 1 ; i ++) {
+        // if (lrpc_ctx.pop(&notif, i) == 0) {
+        //     signal_free_worker(i, notif);
+        // }
+
+        if (worker_responses[i].flag != RUNNING) {
+            if (worker_responses[i].flag == FINISHED) {
+                handle_finished(i);
+            } 
+            else if (worker_responses[i].flag == PREEMPTED) {
+                handle_preempted(i);
+            }
+            dispatch_request(i, cur_tsc);
+        } 
+        else {
+            // printf("Worker %d is still running \n", i);
+            // preempt_worker(i, cur_time);
         }
     }
 
-    /* Dispatch */
-    if (dp == CFCFS) {
-        /* Dispatch from the queues to workers */
-        drain_queue(rtypes[type_to_nsorder[static_cast<int>(ReqType::UNKNOWN)]]);
-    } else if (dp == SJF) {
-        // Assumes rtypes are in ascending order in service time
-        for (uint32_t i = 0; i < n_rtypes; ++i) {
-            if (rtypes[i]->rqueue_head > rtypes[i]->rqueue_tail) {
-                drain_queue(rtypes[i]);
-            }
-        }
-    } else if (dp == EDF) {
-        uint64_t dpt_time = rdtscp(NULL);
-        while (free_peers) {
-            // First identify type closest to deadline
-            double min = -1;
-            int select = -1;
-            for (uint32_t i = 0; i < n_rtypes; ++i) {
-                if (rtypes[i]->rqueue_head == rtypes[i]->rqueue_tail) {
-                    continue;
-                }
-                uint64_t qstamp = rtypes[i]->tsqueue[rtypes[i]->rqueue_tail & (RQUEUE_LEN - 1)];
-                double ttdl = qstamp + (rtypes[i]->deadline * 2.5);
-                if (ttdl < min or min == -1) {
-                    select = i;
-                    min = ttdl;
-                }
-            }
-            if (select == -1) {
-                break;
-            }
-            auto &rtype = rtypes[select];
-            // Then dispatch
-            unsigned long req = rtype->rqueue[rtype->rqueue_tail & (RQUEUE_LEN - 1)];
-            uint32_t peer_id = __builtin_ctz(free_peers);
-            if (likely(lrpc_ctx.push(req, peer_id)) == 0) {
-                num_dped++;
-                rtype->rqueue_tail++;
-                free_peers ^= (1 << peer_id);
-                peer_dpt_tsc[peer_id] = rdtscp(NULL);
-                /*
-                PSP_DEBUG(
-                    "Picked peer " << peer_id << " . " << __builtin_popcount(free_peers) << " free peers"
-                );
-                */
-            }
-        }
-    } else if (dp == DARC) {
-        for (uint32_t i = 0; i < n_rtypes; ++i) {
-            if (rtypes[i]->rqueue_head > rtypes[i]->rqueue_tail) {
-                dyn_resa_drain_queue(rtypes[i]);
-            }
-        }
-        // Check for unexpected requests
-        if (unlikely(rtypes[n_rtypes]->rqueue_head > rtypes[n_rtypes]->rqueue_tail)) {
-            auto &rtype = rtypes[n_rtypes];
-            if ((1 << spillway) & free_peers) {
-                unsigned long req = rtype->rqueue[rtype->rqueue_tail & (RQUEUE_LEN - 1)];
-                if (likely(lrpc_ctx.push(req, spillway)) == 0) {
-                    num_dped++;
-                    rtype->rqueue_tail++;
-                    free_peers ^= (1 << spillway);
-                }
-            }
-        }
-    }
+    /* Dispatch from the queues to workers */
+    // drain_queue(rtypes[type_to_nsorder[static_cast<int>(ReqType::UNKNOWN)]]);
     return 0;
 }
+
 
 int Dispatcher::dyn_resa_drain_queue(RequestType *&rtype) {
     auto &group = groups[rtype->type_group];
