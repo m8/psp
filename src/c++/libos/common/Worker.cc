@@ -1,6 +1,36 @@
 #include <psp/libos/persephone.hh>
 #include "rte_launch.h"
 
+#include <psp/dispatch.h>
+#include <psp/taskqueue.h>
+#include <psp/bench_concord.h>
+
+extern volatile struct networker_pointers_t networker_pointers;
+extern volatile struct worker_response worker_responses[MAX_WORKERS];
+extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+
+extern "C"  
+{
+    extern int getcontext_fast(ucontext_t *ucp);
+    extern int swapcontext_fast(ucontext_t *ouctx, ucontext_t *uctx);
+    extern int swapcontext_fast_to_control(ucontext_t *ouctx, ucontext_t *uctx);
+    extern int swapcontext_very_fast(ucontext_t *ouctx, ucontext_t *uctx);
+}
+
+__thread ucontext_t uctx_main;
+__thread ucontext_t *cont;
+__thread volatile uint8_t finished;
+
+
+extern volatile uint64_t TEST_START_TIME;
+extern volatile uint64_t TEST_END_TIME;
+extern volatile uint64_t TEST_RCVD_SMALL_PACKETS;
+extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
+extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
+extern volatile bool     TEST_FINISHED;
+extern bool IS_FIRST_PACKET;
+
+
 /***************** Worker methods ***************/
 int Worker::register_dpt(Worker &dpt) {
     dpt_id = dpt.worker_id;
@@ -85,6 +115,119 @@ int Worker::app_dequeue(unsigned long *payload) {
     return status;
 }
 
+void Worker::init_worker()
+{
+    worker_responses[1].flag = PROCESSED;
+
+    assert(worker_responses[this->worker_id].flag == PROCESSED);
+
+    printf("Worker response for worker %d is %d\n", this->worker_id, worker_responses[this->worker_id].flag);
+    printf("Address of worker_responses is %p\n", worker_responses);
+}
+
+// TODO Should be inline
+static void finish_request(Worker* worker)
+{
+    worker_responses[worker->worker_id].timestamp = dispatcher_requests[worker->worker_id].timestamp;
+    worker_responses[worker->worker_id].type = dispatcher_requests[worker->worker_id].type;
+    worker_responses[worker->worker_id].mbuf = dispatcher_requests[worker->worker_id].mbuf;
+    worker_responses[worker->worker_id].rnbl = cont;
+    worker_responses[worker->worker_id].category = CONTEXT;
+
+    if(finished == true)
+    {
+        worker_responses[worker->worker_id].flag = FINISHED;
+    }
+    else 
+    {
+        worker_responses[worker->worker_id].flag = PREEMPTED;
+    }
+}
+
+void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
+{
+    char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) payload, char *, NET_HDR_SIZE);
+    char *type_addr = id_addr + sizeof(uint32_t);
+    char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+
+    //uint32_t spin_time = 1000;
+    unsigned int nloops = *reinterpret_cast<unsigned int *>(req_addr) * cycles_per_ns;
+
+    TEST_TOTAL_PACKETS_COUNTER += 1;
+
+    if (TEST_TOTAL_PACKETS_COUNTER == BENCHMARK_STOP_AT_PACKET)
+    {
+        TEST_END_TIME = get_us();
+        TEST_FINISHED = true;
+    }
+
+    // if (req->type == DB_GET || req->type == DB_PUT){
+    //     TEST_RCVD_SMALL_PACKETS += 1;
+    // }
+    // else
+    // {
+    //     TEST_RCVD_BIG_PACKETS += 1;
+    // }
+
+    // Response
+
+    uint32_t type = *reinterpret_cast<uint32_t *>(type_addr);
+    switch(static_cast<ReqType>(type)) {
+        case ReqType::SHORT:
+            printf("Short request\n");
+            break;
+        case ReqType::LONG:
+            printf("Long request\n");
+            break;
+        default:
+            break;
+    }
+
+    *reinterpret_cast<uint32_t *> (req_addr) = 0;
+    payload->l4_len = sizeof(uint32_t) * 4; // request ID + resquest type + response size
+    
+    worker->udp_ctx->outbound_queue[worker->udp_ctx->push_head++ & (OUTBOUND_Q_LEN - 1)] = (unsigned long)payload;
+    worker->udp_ctx->send_packets();    
+
+    finished = true;
+    swapcontext_fast_to_control(cont, &uctx_main);
+}
+
+static inline void handle_fake_new_packet(Worker* worker)
+{
+    int ret;
+    struct rte_mbuf* payload = (struct rte_mbuf*)dispatcher_requests[worker->worker_id].mbuf;
+
+    cont = (struct ucontext_t *)dispatcher_requests[worker->worker_id].rnbl;
+    getcontext_fast(cont);
+    set_context_link(cont, &uctx_main);
+    makecontext(cont, (void (*)(void))simple_generic_work, 2, worker, payload);
+
+    finished = false;
+
+    ret = swapcontext_very_fast(&uctx_main, cont);
+    if (ret)
+    {
+        printf("Failed to do swap into new context\n");
+        exit(-1);
+    }
+}
+
+static inline void handle_context(Worker* worker)
+{
+    int ret;
+    finished = false;
+    cont = (struct ucontext_t*) dispatcher_requests[worker->worker_id].rnbl;
+    set_context_link(cont, &uctx_main);
+    ret = swapcontext_fast(&uctx_main, cont);
+    
+    if (ret)
+    {
+        PSP_ERROR("Failed to swap to existing context\n");
+        exit(-1);
+    }
+}
+
 void Worker::main_loop(void *wrkr) {
     Worker *me = reinterpret_cast<Worker *>(wrkr);
     PSP_DEBUG("Setting up worker thread " << me->worker_id);
@@ -95,8 +238,13 @@ void Worker::main_loop(void *wrkr) {
     }
     me->started = true;
     PSP_INFO("Worker thread " << me->worker_id << " started");
-    //PSP_INFO("Worker thread " << worker_id << " started");
-    while (!me->terminate) {
+    me->init_worker();
+
+
+    // =========== Main loop ===========
+    if(me->worker_id == 0)
+    {
+        while (!me->terminate) {
         unsigned long payload = 0;
         int status = me->dequeue(&payload);
         if (status == EAGAIN) {
@@ -107,7 +255,32 @@ void Worker::main_loop(void *wrkr) {
             PSP_ERROR("Worker " << me->worker_id << " work() error: " << work_status);
             return;
         }
+    }}
+    else 
+    { 
+        while (!me->terminate) 
+        {
+            while (dispatcher_requests[me->worker_id].flag == WAITING);
+            dispatcher_requests[me->worker_id].flag = WAITING;
+            if (dispatcher_requests[me->worker_id].category == PACKET)
+            {
+                if (PSP_UNLIKELY(!IS_FIRST_PACKET))
+                {
+                    TEST_START_TIME = get_us();
+                    IS_FIRST_PACKET = true;
+                }
+                handle_fake_new_packet(me);
+            }
+            else
+            {
+                handle_context(me);
+            }
+
+            finish_request(me);
+        }
     }
+
+
     me->exited = true;
     PSP_INFO("Worker thread " << me->worker_id << " terminating")
     return;

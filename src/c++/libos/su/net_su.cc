@@ -1,8 +1,25 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <psp/libos/su/NetSu.hh>
+#include <ucontext.h>
+#include <psp/dispatch.h>
+#include <psp/taskqueue.h>
+#include <psp/bench_concord.h>
 
 #define MAX_CLIENTS 64
+
+extern struct task_queue tskq[1];
+extern struct mempool context_pool __attribute((aligned(64)));
+extern struct mempool stack_pool __attribute((aligned(64)));
+
+extern volatile uint64_t TEST_START_TIME;
+extern volatile uint64_t TEST_END_TIME;
+extern volatile uint64_t TEST_RCVD_SMALL_PACKETS;
+extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
+extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
+extern volatile bool     TEST_FINISHED;
+extern volatile bool IS_FIRST_PACKET;
+
 
 namespace po = boost::program_options;
 
@@ -37,25 +54,19 @@ int NetWorker::work(int status, unsigned long payload) {
         n_batchs_rcvd++;
         while (udp_ctx->pop_head > udp_ctx->pop_tail and batch_dequeued < MAX_RX_BURST) {
             unsigned long req = udp_ctx->inbound_queue[udp_ctx->pop_tail & (INBOUND_Q_LEN - 1)];
-            /*
-            if (unlikely(is_echo)) {
-                //PSP_OK(udp_ctx->free_mbuf(&sga));
-                if (unlikely(udp_ctx->push_head - udp_ctx->push_tail == OUTBOUND_Q_LEN)) {
-                    PSP_WARN("Outbound UDP queue full. Freeing mbuf " << req);
-                    PSP_OK(udp_ctx->free_mbuf(req));
-                } else {
-                    udp_ctx->pop_tail++;
-                    udp_ctx->outbound_queue[udp_ctx->push_head++ & (OUTBOUND_Q_LEN - 1)] = req;
-                }
-            } else {
-            */
-                int ret = dpt.enqueue(req, cur_tsc);
-                if (ret == EXFULL or ret == ENOENT) {
-                    // Free the request because we can't enqueue it
-                    PSP_OK(udp_ctx->free_mbuf(req));
-                    //break;
-                }
-                udp_ctx->pop_tail++;
+
+            ucontext_t *cont;
+            int ret = context_alloc(&cont);
+            if (unlikely(ret))
+            {
+                printf("Cannot allocate context\n");
+                // mbuf_enqueue(&mqueue, (struct mbuf *)networker_pointers.pkts[i]);
+                continue;
+            }
+
+            tskq_enqueue_tail(&tskq[0], cont, (struct mbuf *) req, 1, 1, cur_tsc);
+
+            udp_ctx->pop_tail++;
             //}
             batch_dequeued++;
         }
