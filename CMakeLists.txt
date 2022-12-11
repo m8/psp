@@ -1,5 +1,6 @@
 cmake_minimum_required (VERSION 3.5.1)
-project (Persephone C CXX)
+project (Persephone 
+         LANGUAGES C CXX ASM)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake")
 
@@ -33,6 +34,26 @@ function(target_add_rocksdb TARGET)
     target_link_libraries(${TARGET} ${RDB_DIR}/librocksdb.a)
     target_link_libraries(${TARGET} ${RDB_LIBRARIES})
 endfunction(target_add_rocksdb)
+
+# Leveldb flags
+set(LEVELDB_DIR ${CMAKE_SOURCE_DIR}/../benchmarks/leveldb)
+set(LEVELDB_LIBRARIES gflags snappy z lz4 bz2 zstd)
+function(target_add_leveldb TARGET)
+    target_include_directories(${TARGET} PUBLIC ${LEVELDB_DIR}/leveldb/include)
+    target_include_directories(${TARGET} PUBLIC ${LEVELDB_DIR}/lib)
+    target_link_libraries(${TARGET} ${LEVELDB_DIR}/lib/concord_apileveldb_clear.a)
+    target_link_libraries(${TARGET} ${LEVELDB_DIR}/leveldb/concord_libleveldb_clear.a)
+    target_link_libraries(${TARGET} ${LEVELDB_LIBRARIES})
+endfunction(target_add_leveldb)
+
+# Concord fake work
+# set(CONCORD_FAKE_WORK_DIR ${CMAKE_SOURCE_DIR}/../benchmarks/looplib/lib)
+# add_library(fake-work-concord STATIC IMPORTED)
+# set_target_properties(fake-work-concord PROPERTIES IMPORTED_LOCATION ${CONCORD_FAKE_WORK_DIR}/concord_loop.a)
+# function(target_add_concord_fake_work TARGET)
+#     target_include_directories(${TARGET} PUBLIC ${CONCORD_FAKE_WORK_DIR})
+#     target_link_libraries(${TARGET} fake-work-concord)
+# endfunction(target_add_concord_fake_work)
 
 # default CFLAGS
 set(COMMON_CFLAGS "-ggdb -fstack-protector -fPIC -Wall -Wextra -Wno-deprecated-declarations -Wno-uninitialized -Wno-unused-parameter -Wno-register -Wl,-zdefs -fvisibility=hidden -I/usr/include/boost -Wno-unused-variable -Wno-empty-body")

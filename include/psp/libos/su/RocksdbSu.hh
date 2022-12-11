@@ -5,7 +5,7 @@
 #include <psp/libos/Request.hh>
 #include <psp/annot.h>
 
-#include <c.h> // RocksDB C bindings
+// #include <c.h> // RocksDB C bindings
 
 #define MAX_RESPONSE_SIZE 32
 #define RESPONSE_TPL "Spinned for %u"
@@ -25,7 +25,7 @@ class RdbWorker : public Worker {
     private: int dequeue(unsigned long *payload);
     private: int work(int status, unsigned long payload) override;
     private: int process_request(unsigned long payload) override;
-    public: rocksdb_t *db;
+    // public: rocksdb_t *db;
 };
 
 #endif //RDB_SU_H_
