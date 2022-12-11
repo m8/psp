@@ -22,7 +22,7 @@ network:
   - '0000:83:00.1'
   mac: '90:e2:ba:55:12:24'
 requests:
-- type: SHORT, LONG
+- type: SCAN, GET
 workers:
   number: 2
   type: MB

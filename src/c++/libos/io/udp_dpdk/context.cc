@@ -8,8 +8,39 @@ int UdpContext::poll() {
     return 0;
 }
 
+// fake networker
+int UdpContext::fake_recv_packets() {
+    // Only dequeue if we have buffer space
+    if (pop_head - pop_tail < INBOUND_Q_LEN - MAX_RX_BURST) {
+        rte_mbuf *pkts[MAX_RX_BURST];
+        size_t count = 8;
+        if (count == 0) {
+            return EAGAIN;
+        }
+        for (size_t i = 0; i < count; ++i) { 
+            // Create a fake mbuf
+            struct rte_mbuf *mbuf = rte_pktmbuf_alloc(mbuf_pool);
+            
+            char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) mbuf, char *, NET_HDR_SIZE);
+            char *type_addr = id_addr + sizeof(uint32_t);
+            char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+            *reinterpret_cast<uint32_t *>(type_addr) = 1;
+
+            PSP_OK(parse_packet(mbuf));
+        }
+#ifdef NET_DEBUG
+    } else {
+        PSP_WARN("Inbound UDP queue full.");
+#endif
+    }
+    return 0;
+}
+
+
+
 int UdpContext::recv_packets() {
     // Only dequeue if we have buffer space
+    // fake_recv_packets();
     if (pop_head - pop_tail < INBOUND_Q_LEN - MAX_RX_BURST) {
         rte_mbuf *pkts[MAX_RX_BURST];
         size_t count = ::rte_eth_rx_burst(port_id, id, pkts, MAX_RX_BURST);

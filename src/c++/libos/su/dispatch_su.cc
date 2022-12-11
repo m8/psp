@@ -31,6 +31,7 @@ volatile uint64_t TEST_TOTAL_PACKETS_COUNTER = 0;
 volatile bool     TEST_FINISHED = false;
 volatile bool IS_FIRST_PACKET = false;
 
+volatile int * cpu_preempt_points [MAX_WORKERS] = {0};
 
 struct task_queue tskq[1];
 
@@ -293,6 +294,19 @@ inline int Dispatcher::push_to_rqueue(unsigned long req, RequestType *&rtype, ui
     }
 }
 
+static inline void preempt_worker(uint8_t i, uint64_t cur_time)
+{
+	if (preempt_check[i] && (((cur_time - timestamps[i]) / 3.3) > 5000))
+	{
+		// Avoid preempting more times.
+		preempt_check[i] = false;
+        // printf("Address: %p\n", cpu_preempt_points[i]);
+        *(cpu_preempt_points[i]) = 1;
+	}
+}
+
+
+
 static inline void dispatch_request(int i, uint64_t cur_time)
 {
     // if(tskq_m_queue.empty())
@@ -305,8 +319,8 @@ static inline void dispatch_request(int i, uint64_t cur_time)
     uint8_t type, category;
     uint64_t timestamp;
 
-    int ret = tskq_dequeue(tskq, &runnable, &mbuf, &type,
-                              &category, &timestamp);
+    int ret = smart_tskq_dequeue(tskq, &runnable, &mbuf, &type,
+                              &category, &timestamp,cur_time);
     if(ret)
     {
         return;
@@ -346,21 +360,16 @@ static inline void handle_preempted(int i)
 	
     tskq_enqueue_tail(&tskq[0], rnbl, mbuf, type, category, timestamp);
 
-    printf("Preempted request %d \n", i);
 	preempt_check[i] = false;
 	worker_responses[i].flag = PROCESSED;
 }
 
 int Dispatcher::dispatch() {
     
-    uint64_t cur_tsc = rdtscp(NULL);
-    
-    //FIXME: only circulate through busy peers?
-    for (uint32_t i = 1; i < n_peers + 1 ; i ++) {
-        // if (lrpc_ctx.pop(&notif, i) == 0) {
-        //     signal_free_worker(i, notif);
-        // }
+    uint64_t cur_tsc = rdtscp(NULL);    
 
+    for (int i = 1; i < n_workers; i++) 
+    {
         if (worker_responses[i].flag != RUNNING) {
             if (worker_responses[i].flag == FINISHED) {
                 handle_finished(i);
@@ -372,7 +381,7 @@ int Dispatcher::dispatch() {
         } 
         else {
             // printf("Worker %d is still running \n", i);
-            // preempt_worker(i, cur_time);
+            preempt_worker(i, cur_tsc);
         }
     }
 

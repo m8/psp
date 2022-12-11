@@ -235,9 +235,10 @@ static inline void set_context_link(ucontext_t *c, ucontext_t *uc_link)
 
 
 #define TASK_CAPACITY    (768*1024)
-#define STACK_CAPACITY   (768*1024)
 #define MEMPOOL_DEFAULT_CHUNKSIZE 128
-#define STACK_SIZE          2048
+#define STACK_CAPACITY      (768*1024) / 2
+#define STACK_SIZE          2048 * 2
+
 
 
 

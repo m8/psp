@@ -4,6 +4,7 @@
 #include <psp/dispatch.h>
 #include <psp/taskqueue.h>
 #include <psp/bench_concord.h>
+#include "concord-leveldb.h"
 
 extern volatile struct networker_pointers_t networker_pointers;
 extern volatile struct worker_response worker_responses[MAX_WORKERS];
@@ -29,6 +30,58 @@ extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
 extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
 extern volatile bool     TEST_FINISHED;
 extern bool IS_FIRST_PACKET;
+
+extern leveldb_t* leveldb_db;
+extern leveldb_options_t* leveldb_options;
+extern leveldb_readoptions_t* leveldb_readoptions;
+extern leveldb_writeoptions_t* leveldb_writeoptions;
+
+extern volatile int * cpu_preempt_points [MAX_WORKERS];
+
+extern "C"
+{
+    __thread int concord_preempt_now;
+    __thread int concord_lock_counter;
+
+    void concord_disable()
+    {
+        // printf("Disabling concord\n");
+        concord_lock_counter -= 1;
+    }
+
+    void concord_enable()
+    {
+        // printf("Enabling concord\n");
+        concord_lock_counter += 1;
+    }
+
+    void concord_func()
+    {
+        if(concord_lock_counter != 0)
+        {
+            return;
+        }
+        concord_preempt_now = 0;
+
+        /* Turn on to benchmark timeliness of yields */
+        // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
+        swapcontext_fast_to_control(cont, &uctx_main);
+    }
+
+    void concord_rdtsc_func()
+    {
+        if(concord_lock_counter != 0)
+        {
+            return;
+        }
+
+        /* Turn on to benchmark timeliness of yields */
+        // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
+        swapcontext_fast_to_control(cont, &uctx_main);
+    }
+}
+
+#define MICROBENCH 0
 
 
 /***************** Worker methods ***************/
@@ -116,9 +169,10 @@ int Worker::app_dequeue(unsigned long *payload) {
 }
 
 void Worker::init_worker()
-{
-    worker_responses[1].flag = PROCESSED;
-
+{    
+    cpu_preempt_points[this->worker_id] = &concord_preempt_now;
+    worker_responses[this->worker_id].flag = PROCESSED;
+    
     assert(worker_responses[this->worker_id].flag == PROCESSED);
 
     printf("Worker response for worker %d is %d\n", this->worker_id, worker_responses[this->worker_id].flag);
@@ -149,11 +203,50 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
     char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) payload, char *, NET_HDR_SIZE);
     char *type_addr = id_addr + sizeof(uint32_t);
     char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+    uint32_t type = *reinterpret_cast<uint32_t *>(type_addr);
 
-    //uint32_t spin_time = 1000;
-    unsigned int nloops = *reinterpret_cast<unsigned int *>(req_addr) * cycles_per_ns;
+
+    switch(static_cast<ReqType>(type)) {
+        case ReqType::SHORT:
+        {
+            #if (MICROBENCH == 1)
+            simpleloop(BENCHMARK_SMALL_PKT_SPIN);
+            #else
+            size_t read_len;
+            char* err;
+            char* key = "musa";
+            printf("GET: key %s\n", key);
+            if(leveldb_db == nullptr || leveldb_readoptions == nullptr)
+            {
+                printf("leveldb_db null\n");
+                exit(1);
+            }
+            char *returned_value = cncrd_leveldb_get(leveldb_db, leveldb_readoptions,
+                                    key, 32, &read_len, &err);
+            #endif
+            break;
+        }
+        case ReqType::LONG:
+        {
+            #if (MICROBENCH == 1)
+            simpleloop(BENCHMARK_LARGE_PKT_SPIN);
+            #else
+            char* key = "musa";
+            printf("SCANNING: key %s\n", key);
+            cncrd_leveldb_scan(leveldb_db, leveldb_readoptions, key);
+            #endif
+            break;
+        }
+        default:
+        {
+            PSP_INFO("Request not found");
+            break;
+        }
+    }
+
 
     TEST_TOTAL_PACKETS_COUNTER += 1;
+    printf("Worker %d finished request %d\n", worker->worker_id, TEST_TOTAL_PACKETS_COUNTER);
 
     if (TEST_TOTAL_PACKETS_COUNTER == BENCHMARK_STOP_AT_PACKET)
     {
@@ -161,28 +254,7 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
         TEST_FINISHED = true;
     }
 
-    // if (req->type == DB_GET || req->type == DB_PUT){
-    //     TEST_RCVD_SMALL_PACKETS += 1;
-    // }
-    // else
-    // {
-    //     TEST_RCVD_BIG_PACKETS += 1;
-    // }
-
     // Response
-
-    uint32_t type = *reinterpret_cast<uint32_t *>(type_addr);
-    switch(static_cast<ReqType>(type)) {
-        case ReqType::SHORT:
-            printf("Short request\n");
-            break;
-        case ReqType::LONG:
-            printf("Long request\n");
-            break;
-        default:
-            break;
-    }
-
     *reinterpret_cast<uint32_t *> (req_addr) = 0;
     payload->l4_len = sizeof(uint32_t) * 4; // request ID + resquest type + response size
     
@@ -215,6 +287,7 @@ static inline void handle_fake_new_packet(Worker* worker)
 
 static inline void handle_context(Worker* worker)
 {
+
     int ret;
     finished = false;
     cont = (struct ucontext_t*) dispatcher_requests[worker->worker_id].rnbl;

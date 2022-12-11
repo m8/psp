@@ -11,6 +11,7 @@
 class NetWorker : public Worker {
     public: uint64_t num_sent = 0; /** < Total number of answered requests */
     private: uint32_t n_rcvd = 0;
+    public: int fake_work();
 
     public: uint32_t type_to_nsorder[static_cast<int>(ReqType::LAST)];
 

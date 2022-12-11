@@ -81,3 +81,23 @@ int NetWorker::work(int status, unsigned long payload) {
 
     return 0;
 }
+
+
+// int NetWorker::fake_work()
+// {
+//     uint64_t cur_tsc = rdtscp(NULL);
+
+//     // create mbuf
+//     struct rte_mbuf *mbuf = rte_pktmbuf_alloc(udp_ctx->mbuf_pool);
+//     char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) mbuf, char *, NET_HDR_SIZE);
+//     char *type_addr = id_addr + sizeof(uint32_t);
+//     char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+//     *reinterpret_cast<uint32_t *>(type_addr) = 1;
+
+    
+//     udp_ctx->pop_tail++;
+//     udp_ctx->inbound_queue[udp_ctx->pop_head++ & (INBOUND_Q_LEN - 1)] = (unsigned long) (void *) mbuf;
+
+//     printf("Pushed packet\n");
+//     return 0;
+// }

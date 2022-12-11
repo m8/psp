@@ -13,12 +13,21 @@
 #include <psp/annot.h>
 #include <psp/dispatch.h>
 #include <psp/taskqueue.h>
+#include <leveldb/c.h>
 
 
 std::string log_dir = "./";
 std::string label = "PspApp";
 Worker *workers[MAX_WORKERS];
 uint32_t total_workers = 0;
+
+
+leveldb_t *leveldb_db = nullptr;
+leveldb_options_t *leveldb_options = nullptr;
+leveldb_readoptions_t *leveldb_readoptions = nullptr;
+leveldb_writeoptions_t *leveldb_writeoptions = nullptr;
+
+
 
 /********** CONTROL PLANE ******************/
 Psp::Psp(std::string &app_cfg, std::string l) {
@@ -29,6 +38,90 @@ Psp::Psp(std::string &app_cfg, std::string l) {
     dpdk_net_init(app_cfg.c_str());
 
     taskqueue_init();
+
+     leveldb_options_t *options = leveldb_options_create();
+    leveldb_options_set_create_if_missing(options, 1);
+
+    // read options
+    leveldb_readoptions = leveldb_readoptions_create();
+
+    // write options
+    leveldb_writeoptions = leveldb_writeoptions_create();
+
+    // Open DB
+    char *err = NULL;
+    char DBPath[] = "/tmp/my_db";
+
+    // Destroy and re-create DB
+    leveldb_destroy_db(options, DBPath, &err);
+    leveldb_db = leveldb_open(options, DBPath, &err);
+
+    char *db_err = NULL;
+    leveldb_put(leveldb_db, leveldb_writeoptions, "mykey", 5, "myval", 5, &db_err);
+
+    size_t len;
+    char *retdb = leveldb_get(leveldb_db, leveldb_readoptions, "mykey", 5, &len, &db_err);
+
+    // First check
+    assert(strcmp(retdb, "myval"));
+
+    // Create Db
+    std::vector<int> keys;
+    for (size_t i = 0; i < 100000; i++)
+    {
+        char keybuf[32], valbuf[32];
+
+        int r = rand() % 10000000;
+
+        snprintf(keybuf, 32, "key%d", r);
+        snprintf(valbuf, 32, "val%d", r);
+        leveldb_put(leveldb_db, leveldb_writeoptions, keybuf, 32, valbuf, 32, &db_err);
+
+        if (db_err != NULL)
+        {
+            fprintf(stderr, "write fail. %s\n", keybuf);
+        }
+
+        keys.push_back(r);
+    }
+
+    // Second check
+    for (size_t i = 0; i < 50; i++)
+    {
+        char keybuf[32], valbuf[32];
+
+        int r = rand() % 10000;
+
+        snprintf(keybuf, 32, "key%d", keys[r]);
+        snprintf(valbuf, 32, "val%d", keys[r]);
+
+        char *retdb = leveldb_get(leveldb_db, leveldb_readoptions, keybuf, 32, &len, &db_err);
+
+        if (db_err != NULL)
+        {
+            fprintf(stderr, "read fail. %s\n", keybuf);
+        }
+
+        assert(strcmp(retdb, valbuf));
+    }
+
+    // Third check
+    char *key = NULL;
+    size_t key_len = 0;
+    char *val = NULL;
+    size_t val_len = 0;
+    leveldb_iterator_t *it = leveldb_create_iterator(leveldb_db, leveldb_readoptions);
+    leveldb_iter_seek_to_first(it);
+    int count = 0;
+    while (leveldb_iter_valid(it))
+    {
+        key = (char *)leveldb_iter_key(it, &key_len);
+        val = (char *)leveldb_iter_value(it, &val_len);
+        count++;
+        leveldb_iter_next(it);
+    }
+
+    PSP_INFO("Leveldb completed " << count );
 
     /* Parse the configuration */
     try {

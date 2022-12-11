@@ -46,6 +46,7 @@
 class UdpContext {
     private: uint32_t id;
 
+    public: int fake_recv_packets();
     private: const uint16_t numa_socket_id = 0;
     private: std::vector<rte_flow *> flows;
 
@@ -62,7 +63,7 @@ class UdpContext {
         .addr_bytes = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
     };
 
-    private: struct rte_mempool *mbuf_pool;
+    public: struct rte_mempool *mbuf_pool;
     private: int init_mempool(struct rte_mempool **mempool_out,
                               const uint16_t numa_socket_id,
                               const char *name);
