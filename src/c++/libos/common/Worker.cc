@@ -269,8 +269,8 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
     *reinterpret_cast<uint32_t *> (req_addr) = 0;
     payload->l4_len = sizeof(uint32_t) * 4; // request ID + resquest type + response size
     
-    worker->udp_ctx->outbound_queue[worker->udp_ctx->push_head++ & (OUTBOUND_Q_LEN - 1)] = (unsigned long)payload;
-    worker->udp_ctx->send_packets();    
+    // worker->udp_ctx->outbound_queue[worker->udp_ctx->push_head++ & (OUTBOUND_Q_LEN - 1)] = (unsigned long)payload;
+    // worker->udp_ctx->send_packets();    
 
     finished = true;
     swapcontext_fast_to_control(cont, &uctx_main);

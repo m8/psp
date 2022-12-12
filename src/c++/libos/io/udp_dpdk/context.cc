@@ -1,4 +1,8 @@
 #include <psp/libos/io/udp_dpdk/context.hh>
+#include <psp/bench_concord.h>
+#include <psp/libos/Request.hh>
+
+extern uint64_t TEST_TOTAL_PACKETS_COUNTER;
 
 int UdpContext::poll() {
     // Check RX
@@ -36,23 +40,47 @@ int UdpContext::fake_recv_packets() {
     return 0;
 }
 
+rte_mbuf * UdpContext::create_fake_packet(ReqType type)
+{
+    // Create a fake mbuf
+    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(mbuf_pool);
+    
+    char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) mbuf, char *, NET_HDR_SIZE);
+    char *type_addr = id_addr + sizeof(uint32_t);
+    char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+    *reinterpret_cast<uint32_t *>(type_addr) = (int)type;
 
+    return mbuf;
+}
+
+int created_packets = 0;
 
 int UdpContext::recv_packets() {
     // Only dequeue if we have buffer space
     // fake_recv_packets();
+    if(unlikely(created_packets >= BENCHMARK_CREATE_NO_PACKET))
+    {
+        return EAGAIN;
+    }
+
     if (pop_head - pop_tail < INBOUND_Q_LEN - MAX_RX_BURST) {
-        rte_mbuf *pkts[MAX_RX_BURST];
-        size_t count = ::rte_eth_rx_burst(port_id, id, pkts, MAX_RX_BURST);
-        if (count == 0) {
-            return EAGAIN;
+        
+        for (int i = 0; i < MAX_RX_BURST; i++) {
+            created_packets++;
+            ReqType type = (rand() % 1000) < 995 ? ReqType::SHORT : ReqType::LONG;
+            parse_packet(create_fake_packet(type));
         }
-        for (size_t i = 0; i < count; ++i) {
-            if (i + RX_PREFETCH_STRIDE < count) {
-                rte_prefetch0(rte_pktmbuf_mtod(pkts[i + RX_PREFETCH_STRIDE], char *));
-            }
-            PSP_OK(parse_packet(pkts[i]));
-        }
+        
+        // size_t count = ::rte_eth_rx_burst(port_id, id, pkts, MAX_RX_BURST);
+        // if (count == 0) {
+        //     return EAGAIN;
+        // }
+        // for (size_t i = 0; i < count; ++i) {
+        //     if (i + RX_PREFETCH_STRIDE < count) {
+        //         rte_prefetch0(rte_pktmbuf_mtod(pkts[i + RX_PREFETCH_STRIDE], char *));
+        //     }
+        //     PSP_OK(parse_packet(pkts[i]));
+        // }
 #ifdef NET_DEBUG
     } else {
         PSP_WARN("Inbound UDP queue full.");
@@ -256,7 +284,7 @@ int UdpContext::init_mempool(struct rte_mempool **mempool_out,
     // create pool of memory for ring buffers.
     *mempool_out = rte_pktmbuf_pool_create_by_ops(
         name,
-        NUM_MBUFS * rte_eth_dev_count_avail(),
+        NUM_MBUFS * 1,
         MBUF_CACHE_SIZE,
         0,
         MBUF_DATA_SIZE,
@@ -268,8 +296,8 @@ int UdpContext::init_mempool(struct rte_mempool **mempool_out,
 
     log_debug("Created mempool %s of size (%d * %d) * (%d)  = %d Bytes",
             name,
-            NUM_MBUFS, rte_eth_dev_count_avail(), MBUF_DATA_SIZE,
-            NUM_MBUFS * rte_eth_dev_count_avail() * MBUF_DATA_SIZE);
+            NUM_MBUFS, 1, MBUF_DATA_SIZE,
+            NUM_MBUFS * 1 * MBUF_DATA_SIZE);
 
     // Create a cache for the context
     if (rte_mempool_default_cache(*mempool_out, numa_socket_id)) {

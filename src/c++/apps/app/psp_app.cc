@@ -3,6 +3,8 @@
 #include <csignal>
 #include <leveldb/c.h>
 
+extern NetWorker *net_worker;
+
 int main(int argc, char *argv[])
 {
     if (TRACE)
@@ -28,6 +30,8 @@ int main(int argc, char *argv[])
             break;
         }
     }
+
+    net_worker->fake_work();
 
     /* Join threads */
     for (unsigned int i = 0; i < total_workers; ++i)

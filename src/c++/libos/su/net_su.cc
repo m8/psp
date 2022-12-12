@@ -16,36 +16,40 @@ extern volatile uint64_t TEST_START_TIME;
 extern volatile uint64_t TEST_END_TIME;
 extern volatile uint64_t TEST_RCVD_SMALL_PACKETS;
 extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
-extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER; 
-extern volatile bool     TEST_FINISHED;
+extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER;
+extern volatile bool TEST_FINISHED;
 extern volatile bool IS_FIRST_PACKET;
-
 
 namespace po = boost::program_options;
 
-int NetWorker::setup() {
-    //pin_thread(pthread_self(), cpu_id);
+int NetWorker::setup()
+{
+    // pin_thread(pthread_self(), cpu_id);
     PSP_NOTNULL(EPERM, udp_ctx);
     PSP_INFO("Set up net worker " << worker_id);
     return 0;
 }
 
 // Just a filler
-int NetWorker::dequeue(unsigned long *payload) {
+int NetWorker::dequeue(unsigned long *payload)
+{
     return ENOTSUP;
 }
 
 // To fill vtable entry
-int NetWorker::process_request(unsigned long payload) {
+int NetWorker::process_request(unsigned long payload)
+{
     return ENOTSUP;
 }
 
-int NetWorker::work(int status, unsigned long payload) {
+int NetWorker::work(int status, unsigned long payload)
+{
     // Dispatch enqueued requests
     // auto start = std::chrono::high_resolution_clock::now();
     unsigned long cur_tsc = rdtsc();
 
-    if (dpt.dp != Dispatcher::dispatch_mode::DFCFS) {
+    if (dpt.dp != Dispatcher::dispatch_mode::DFCFS)
+    {
         PSP_OK(dpt.dispatch(cur_tsc));
     }
 
@@ -80,11 +84,11 @@ int NetWorker::work(int status, unsigned long payload) {
         PSP_OK(udp_ctx->send_packets());
     }
     */
-   
+
     dpt.dispatch_request(cur_tsc, dpt.n_workers);
     // auto end = std::chrono::high_resolution_clock::now();
     // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    
+
     // if (duration.count() > 0) {
     //     printf("Net worker %ld us \n", duration.count());
     // }
@@ -92,22 +96,35 @@ int NetWorker::work(int status, unsigned long payload) {
     return 0;
 }
 
+int NetWorker::fake_work()
+{
+    int i = 0;
+    while (i < 10)
+    {
+        // uint64_t cur_tsc = rdtscp(NULL);
 
-// int NetWorker::fake_work()
-// {
-//     uint64_t cur_tsc = rdtscp(NULL);
+        // // create mbuf
+        // struct rte_mbuf *mbuf = rte_pktmbuf_alloc(udp_ctx->mbuf_pool);
+        // char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf *)mbuf, char *, NET_HDR_SIZE);
+        // char *type_addr = id_addr + sizeof(uint32_t);
+        // char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+        // *reinterpret_cast<uint32_t *>(type_addr) = 1;
 
-//     // create mbuf
-//     struct rte_mbuf *mbuf = rte_pktmbuf_alloc(udp_ctx->mbuf_pool);
-//     char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) mbuf, char *, NET_HDR_SIZE);
-//     char *type_addr = id_addr + sizeof(uint32_t);
-//     char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
-//     *reinterpret_cast<uint32_t *>(type_addr) = 1;
+        // ucontext_t *cont;
+        // int ret = context_alloc(&cont);
+        // if (unlikely(ret))
+        // {
+        //     printf("Cannot allocate context\n");
+        //     // mbuf_enqueue(&mqueue, (struct mbuf *)networker_pointers.pkts[i]);
+        // }
 
-    
-//     udp_ctx->pop_tail++;
-//     udp_ctx->inbound_queue[udp_ctx->pop_head++ & (INBOUND_Q_LEN - 1)] = (unsigned long) (void *) mbuf;
+        // tskq_enqueue_tail(&tskq, cont, (struct mbuf *)mbuf, 1, 1, cur_tsc);
 
-//     printf("Pushed packet\n");
-//     return 0;
-// }
+        // // udp_ctx->pop_tail++;
+        // // udp_ctx->inbound_queue[udp_ctx->pop_head++ & (INBOUND_Q_LEN - 1)] = (unsigned long) (void *) mbuf;
+
+        // printf("Pushed packet\n");
+        // i++;
+    }
+    return 0;
+}

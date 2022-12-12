@@ -28,10 +28,12 @@ int dpdk_net_init(const char *app_cfg_filename) {
     int unused = -1;
     PSP_OK(rte_eal_init(unused, init_cargs.size(), init_cargs.data()));
     const uint16_t nb_ports = rte_eth_dev_count_avail();
-    PSP_TRUE(ENOENT, nb_ports > 0);
-    PSP_INFO(
-        "DPDK reports that " << nb_ports << " ports (interfaces) are available for the application."
-    );
+    // PSP_TRUE(ENOENT, nb_ports > 0);
+    // PSP_INFO(
+    //     "DPDK reports that " << nb_ports << " ports (interfaces) are available for the application."
+    // );
+
+    printf("DPDPDK\n");
 
     return 0;
 }

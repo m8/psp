@@ -4,6 +4,7 @@
 #include <psp/libos/io/udp_dpdk/dpdk.hh>
 #include <psp/annot.h>
 #include <psp/logging.hh>
+#include <psp/libos/Request.hh>
 
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
@@ -85,6 +86,7 @@ class UdpContext {
     public: unsigned long outbound_queue[OUTBOUND_Q_LEN];
     public: uint32_t push_tail = 0;
     public: uint32_t push_head = 0;
+    public: rte_mbuf* create_fake_packet(ReqType type);
 
     public:
         UdpContext(uint32_t id,
@@ -101,7 +103,7 @@ class UdpContext {
                 }
             }
             mbuf_pool = *mempool;
-            rte_ether_unformat_addr(mac.c_str(), &my_mac);
+            // rte_ether_unformat_addr(mac.c_str(), &my_mac);
             
             // rte_eth_dev_mac_addr_add(port_id, my_mac);
             // if (ret != 0)

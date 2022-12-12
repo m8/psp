@@ -27,7 +27,7 @@ leveldb_options_t *leveldb_options = nullptr;
 leveldb_readoptions_t *leveldb_readoptions = nullptr;
 leveldb_writeoptions_t *leveldb_writeoptions = nullptr;
 
-
+NetWorker *net_worker;
 
 /********** CONTROL PLANE ******************/
 Psp::Psp(std::string &app_cfg, std::string l) {
@@ -39,7 +39,7 @@ Psp::Psp(std::string &app_cfg, std::string l) {
 
     taskqueue_init();
 
-     leveldb_options_t *options = leveldb_options_create();
+    leveldb_options_t *options = leveldb_options_create();
     leveldb_options_set_create_if_missing(options, 1);
 
     // read options
@@ -149,6 +149,8 @@ Psp::Psp(std::string &app_cfg, std::string l) {
             if (net_workers.size() > cpus.size()) {
                 PSP_ERROR("Not enough service units to accomodate net workers");
             }
+
+            printf("chcekc\n");
             n_net_workers = net_workers.size();
             for (size_t i = 0; i < n_net_workers; ++i) {
                 bool is_echo = false;
@@ -156,7 +158,7 @@ Psp::Psp(std::string &app_cfg, std::string l) {
                     net_workers[i]["is_echo"].as<uint32_t>()) {
                     is_echo = true;
                 }
-                NetWorker *net_worker = new NetWorker(is_echo);
+                net_worker = new NetWorker(is_echo);
                 net_worker->eal_thread = true;
                 net_worker->cpu_id = cpus[i];
 
@@ -346,10 +348,10 @@ Psp::Psp(std::string &app_cfg, std::string l) {
         }
 
         /* Setup NIC ports */
-        PSP_INFO("Setting up NIC ports");
-        if (init_dpdk_port(port_id, net_mempool, n_tqs, n_rqs) != 0) {
-            exit(1);
-        }
+        // PSP_INFO("Setting up NIC ports");
+        // if (init_dpdk_port(port_id, net_mempool, n_tqs, n_rqs) != 0) {
+        //     exit(1);
+        // }
 
         /* Setup fdir on net worker rxqs */
         //netw->udp_ctx->set_fdir();

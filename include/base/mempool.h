@@ -60,8 +60,6 @@ static inline void mempool_free(struct mempool *m, void *item)
 // =============== NEWLY ADDED ===============
 static int mempool_create(struct mempool *m, int n_elements, int element_siz)
 {
-    printf("Check 1\n");
-
     // Check if the input arguments are valid
     if (!m || n_elements <= 0 || element_siz <= 0) {
         return -1; // Invalid input
@@ -78,8 +76,6 @@ static int mempool_create(struct mempool *m, int n_elements, int element_siz)
         return -1; // Failed to allocate memory
     }
 
-    printf("Check 1\n");
-
     // Calculate the number of items and pages in the memory pool
     m->num_items = m->len / element_siz;
     m->num_pages = 0;
@@ -91,9 +87,6 @@ static int mempool_create(struct mempool *m, int n_elements, int element_siz)
         return -1; // Failed to allocate memory for the free list
     }
 
-    printf("Check 1\n");
-
-
     // Initialize the free list of items
     m->allocated = 0;
     m->capacity = m->num_items;
@@ -102,8 +95,6 @@ static int mempool_create(struct mempool *m, int n_elements, int element_siz)
         m->free_items[i] = p;
         p=(char*)p + element_siz;
     }
-
-    printf("Check 1\n");
 
     return 0; // Success
 }
