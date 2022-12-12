@@ -8,7 +8,7 @@
 
 #define MAX_CLIENTS 64
 
-extern struct task_queue tskq[1];
+extern struct task_queue tskq;
 extern struct mempool context_pool __attribute((aligned(64)));
 extern struct mempool stack_pool __attribute((aligned(64)));
 
@@ -42,13 +42,15 @@ int NetWorker::process_request(unsigned long payload) {
 
 int NetWorker::work(int status, unsigned long payload) {
     // Dispatch enqueued requests
+    // auto start = std::chrono::high_resolution_clock::now();
+    unsigned long cur_tsc = rdtsc();
+
     if (dpt.dp != Dispatcher::dispatch_mode::DFCFS) {
-        PSP_OK(dpt.dispatch());
+        PSP_OK(dpt.dispatch(cur_tsc));
     }
 
-    // Check if we got packets from the network
+    // // Check if we got packets from the network
     if (udp_ctx->recv_packets() != EAGAIN) {
-        uint64_t cur_tsc = rdtscp(NULL);
         //Process a batch of packets
         size_t batch_dequeued = 0;
         n_batchs_rcvd++;
@@ -64,7 +66,7 @@ int NetWorker::work(int status, unsigned long payload) {
                 continue;
             }
 
-            tskq_enqueue_tail(&tskq[0], cont, (struct mbuf *) req, 1, 1, cur_tsc);
+            tskq_enqueue_tail(&tskq, cont, (struct mbuf *) req, 1, 1, cur_tsc);
 
             udp_ctx->pop_tail++;
             //}
@@ -79,7 +81,14 @@ int NetWorker::work(int status, unsigned long payload) {
     }
     */
    
-    dpt.dispatch_request(rdtsc(), dpt.n_workers);
+    dpt.dispatch_request(cur_tsc, dpt.n_workers);
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    
+    // if (duration.count() > 0) {
+    //     printf("Net worker %ld us \n", duration.count());
+    // }
+
     return 0;
 }
 

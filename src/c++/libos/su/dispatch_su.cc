@@ -37,7 +37,7 @@ volatile bool IS_FIRST_PACKET = false;
 
 volatile int * cpu_preempt_points [MAX_WORKERS] = {0};
 
-struct task_queue tskq[1];
+struct task_queue tskq;
 
 
 // To fill vtable entries
@@ -330,6 +330,7 @@ static inline void preempt_worker(uint8_t i, uint64_t cur_time)
 {
 	if (preempt_check[i].check && (((cur_time - preempt_check[i].timestamp) / 3.3) > 5000))
 	{
+        printf("Preempting worker %d\n", i);
 		// Avoid preempting more times.
 		preempt_check[i].check = false;
         // printf("Address: %p\n", cpu_preempt_points[i]);
@@ -341,7 +342,7 @@ static inline int get_idle_core(int num_workers)
 {
 	uint8_t min_occupancy = JBSQ_LEN;
 	int idle = -1;
-	for (int i = 0; i < num_workers; i++){
+	for (int i = 1; i < num_workers; i++){
 		if(!dispatch_states[i].occupancy)
 			return i;
 		else if (dispatch_states[i].occupancy < min_occupancy){
@@ -363,9 +364,10 @@ void Dispatcher::dispatch_request(uint64_t cur_time, int num_workers)
 		uint8_t type, category;
 		uint64_t timestamp;
 
-		if (smart_tskq_dequeue(tskq, &rnbl, &mbuf, &type,
+		if (smart_tskq_dequeue(&tskq, &rnbl, &mbuf, &type,
 							&category, &timestamp, cur_time))
 			return;
+        printf("Idle core: %d\n", idle);
 		
 		uint8_t active_req = dispatch_states[idle].next_push;
 		dispatcher_requests[idle].requests[active_req].rnbl = rnbl;
@@ -388,7 +390,7 @@ static inline void handle_finished(uint8_t i, uint8_t active_req)
 	context_free((ucontext_t *) worker_responses[i].responses[active_req].rnbl);
 	rte_pktmbuf_free((struct rte_mbuf *) worker_responses[i].responses[active_req].mbuf);
     
-    preempt_check[i].check = false;
+    // preempt_check[i].check = true;
 	worker_responses[i].responses[active_req].flag = PROCESSED;
 }
 
@@ -404,13 +406,13 @@ static inline void handle_preempted(uint8_t i, uint8_t active_req)
 	category = worker_responses[i].responses[active_req].category;
 	type = worker_responses[i].responses[active_req].type;
 	timestamp = worker_responses[i].responses[active_req].timestamp;
-	tskq_enqueue_tail(&tskq[type], rnbl, mbuf, type, category, timestamp);
+	tskq_enqueue_tail(&tskq, rnbl, mbuf, type, category, timestamp);
 	worker_responses[i].responses[active_req].flag = PROCESSED;
 }
 
 int init = 0;
 
-int Dispatcher::dispatch() {
+int Dispatcher::dispatch(unsigned long cur_tsc) {
     
     if(unlikely(!init))
     {
@@ -420,8 +422,6 @@ int Dispatcher::dispatch() {
         preempt_check_init(n_workers);
         dispatch_states_init(n_workers);
     }
-
-    uint64_t cur_tsc = rdtscp(NULL);    
 
     for (int i = 1; i < n_workers; i++) 
     {
@@ -437,6 +437,7 @@ int Dispatcher::dispatch() {
 		    }
             else if (worker_responses[i].responses[dispatch_states[i].next_pop].flag == PREEMPTED)
             {
+                printf("Preempted\n");
                 handle_preempted(i, dispatch_states[i].next_pop);
                 jbsq_get_next(&(dispatch_states[i].next_pop));
                 dispatch_states[i].occupancy--;

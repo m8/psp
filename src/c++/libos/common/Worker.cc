@@ -65,7 +65,7 @@ extern "C"
             return;
         }
         concord_preempt_now = 0;
-
+        printf("Concord func called\n");
 
         /* Turn on to benchmark timeliness of yields */
         // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
@@ -192,16 +192,18 @@ static void finish_request(Worker* worker)
     worker_responses[worker->worker_id].responses[active_req].mbuf = dispatcher_requests[worker->worker_id].requests[active_req].mbuf;
     worker_responses[worker->worker_id].responses[active_req].rnbl = cont;
     worker_responses[worker->worker_id].responses[active_req].category = CONTEXT;
+    
     if (finished)
     {
         worker_responses[worker->worker_id].responses[active_req].flag = FINISHED;
     }
     else
     {
+        printf("Save preempted flag\n");
         worker_responses[worker->worker_id].responses[active_req].flag = PREEMPTED;
     }
-    dispatcher_requests[worker->worker_id].requests[active_req].flag = DONE;
 
+    dispatcher_requests[worker->worker_id].requests[active_req].flag = DONE;
 }
 
 void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
@@ -210,6 +212,7 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
     char *type_addr = id_addr + sizeof(uint32_t);
     char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
     uint32_t type = *reinterpret_cast<uint32_t *>(type_addr);
+
 
 
     switch(static_cast<ReqType>(type)) {
@@ -221,14 +224,12 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
             size_t read_len;
             char* err;
             char* key = "musa";
-            printf("GET: key %s\n", key);
-            if(leveldb_db == nullptr || leveldb_readoptions == nullptr)
-            {
-                printf("leveldb_db null\n");
-                exit(1);
-            }
+            auto start = std::chrono::high_resolution_clock::now();
             char *returned_value = cncrd_leveldb_get(leveldb_db, leveldb_readoptions,
                                     key, 32, &read_len, &err);
+            auto end = std::chrono::high_resolution_clock::now();
+            printf("get finished: time ellapsed %ld microseconds\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+
             #endif
             break;
         }
@@ -238,8 +239,12 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
             simpleloop(BENCHMARK_LARGE_PKT_SPIN);
             #else
             char* key = "musa";
-            printf("SCANNING: key %s\n", key);
+            auto start = std::chrono::high_resolution_clock::now();
             cncrd_leveldb_scan(leveldb_db, leveldb_readoptions, key);
+            auto end = std::chrono::high_resolution_clock::now();
+            printf("scan finished: key %s\n", key);
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            printf("scan took %ld microseconds\n", duration.count());
             #endif
             break;
         }
@@ -340,6 +345,7 @@ void Worker::main_loop(void *wrkr) {
     { 
         while (!me->terminate) 
         {
+            printf("Waiting for new request\n");
             while (dispatcher_requests[me->worker_id].requests[active_req].flag != READY);
 
             preempt_check[me->worker_id].timestamp = rdtsc();
@@ -348,22 +354,17 @@ void Worker::main_loop(void *wrkr) {
 
             if (dispatcher_requests[me->worker_id].requests[active_req].category == PACKET)
             {
-                if (unlikely(!IS_FIRST_PACKET))
-                {
-                    TEST_START_TIME = get_us();
-                    IS_FIRST_PACKET = true;
-                }
-
+                printf("Handling new packet\n");
                 handle_fake_new_packet(me);
             }
             else
             {
+                printf("Handling context\n");
                 handle_context(me);
             }
-
             preempt_check[me->worker_id].check = false;
 
-
+            printf("Finish Request\n");
             finish_request(me);
             jbsq_get_next(&active_req);
         }

@@ -95,7 +95,7 @@ class Dispatcher : public Worker {
     private: int process_request(unsigned long req) override;
     public: int signal_free_worker(int peer_id, unsigned long type);
     public: int enqueue(unsigned long req, uint64_t cur_tsc);
-    public: int dispatch();
+    public: int dispatch(unsigned long);
     private: inline int push_to_rqueue(unsigned long req, RequestType *&rtype, uint64_t cur_tsc);
     public : void dispatch_request(unsigned long cur_time, int num_workers);
 
