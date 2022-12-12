@@ -78,7 +78,8 @@ int NetWorker::work(int status, unsigned long payload) {
         PSP_OK(udp_ctx->send_packets());
     }
     */
-
+   
+    dpt.dispatch_request(rdtsc(), dpt.n_workers);
     return 0;
 }
 

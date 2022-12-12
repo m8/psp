@@ -9,11 +9,15 @@
 #include <psp/taskqueue.h>
 
 volatile struct networker_pointers_t networker_pointers;
-volatile struct worker_response worker_responses[MAX_WORKERS];
-volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+// volatile struct worker_response worker_responses[MAX_WORKERS];
+// volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+
+volatile struct jbsq_worker_response worker_responses[MAX_WORKERS];
+volatile struct jbsq_dispatcher_request dispatcher_requests[MAX_WORKERS];
+volatile struct jbsq_preemption preempt_check[MAX_WORKERS];
+struct worker_state dispatch_states[MAX_WORKERS];
 
 static uint64_t timestamps[MAX_WORKERS];
-static uint8_t preempt_check[MAX_WORKERS];
 
 // Vector additions
 // std::queue<struct task> tskq_m_queue;
@@ -294,94 +298,149 @@ inline int Dispatcher::push_to_rqueue(unsigned long req, RequestType *&rtype, ui
     }
 }
 
+void preempt_check_init(int n_workers)
+{
+	int i;
+	for (i = 0; i < n_workers; i++){
+		preempt_check[i].check = false;
+		preempt_check[i].timestamp = MAX_UINT64;
+	}
+}
+
+void dispatch_states_init(int n_workers)
+{
+	int i;
+	for (i = 0; i < n_workers; i++){
+		dispatch_states[i].next_push = 0;
+		dispatch_states[i].next_pop = 0;
+		dispatch_states[i].occupancy = 0;
+	}
+}
+
+static void requests_init(int num_workers) {
+	int i;
+	for (i=0; i < num_workers; i++){
+		for(uint8_t j = 0; j < JBSQ_LEN; j++)
+		dispatcher_requests[i].requests[j].flag = INACTIVE;
+	}
+}
+
+
 static inline void preempt_worker(uint8_t i, uint64_t cur_time)
 {
-	if (preempt_check[i] && (((cur_time - timestamps[i]) / 3.3) > 5000))
+	if (preempt_check[i].check && (((cur_time - preempt_check[i].timestamp) / 3.3) > 5000))
 	{
 		// Avoid preempting more times.
-		preempt_check[i] = false;
+		preempt_check[i].check = false;
         // printf("Address: %p\n", cpu_preempt_points[i]);
         *(cpu_preempt_points[i]) = 1;
 	}
 }
 
-
-
-static inline void dispatch_request(int i, uint64_t cur_time)
+static inline int get_idle_core(int num_workers)
 {
-    // if(tskq_m_queue.empty())
-    // {
-    //     return;
-    // }
-
-    // struct task & ret = tskq_m_queue.front();
-    void * runnable, * mbuf;
-    uint8_t type, category;
-    uint64_t timestamp;
-
-    int ret = smart_tskq_dequeue(tskq, &runnable, &mbuf, &type,
-                              &category, &timestamp,cur_time);
-    if(ret)
-    {
-        return;
-    }
-
-    worker_responses[i].flag = RUNNING;
-    dispatcher_requests[i].rnbl = runnable;
-    dispatcher_requests[i].mbuf = mbuf;
-    dispatcher_requests[i].type = type;
-    dispatcher_requests[i].category = category;
-    dispatcher_requests[i].timestamp = timestamp;
-    timestamps[i] = cur_time;
-    preempt_check[i] = true;
-    dispatcher_requests[i].flag = ACTIVE;
+	uint8_t min_occupancy = JBSQ_LEN;
+	int idle = -1;
+	for (int i = 0; i < num_workers; i++){
+		if(!dispatch_states[i].occupancy)
+			return i;
+		else if (dispatch_states[i].occupancy < min_occupancy){
+			min_occupancy = dispatch_states[i].occupancy;
+			idle = i;
+		}
+	}
+	return idle;
 }
 
-static void handle_finished(int i)
-{    
-    context_free((ucontext_t *) worker_responses[i].rnbl);
-    rte_pktmbuf_free((rte_mbuf *) worker_responses[i].mbuf);
+void Dispatcher::dispatch_request(uint64_t cur_time, int num_workers)
+{
+    while(1){
+		int idle = get_idle_core(num_workers);
+		if(idle == -1)
+			return;
 
-    preempt_check[i] = false;
-    worker_responses[i].flag = PROCESSED;
+		void *rnbl, *mbuf;
+		uint8_t type, category;
+		uint64_t timestamp;
+
+		if (smart_tskq_dequeue(tskq, &rnbl, &mbuf, &type,
+							&category, &timestamp, cur_time))
+			return;
+		
+		uint8_t active_req = dispatch_states[idle].next_push;
+		dispatcher_requests[idle].requests[active_req].rnbl = rnbl;
+		dispatcher_requests[idle].requests[active_req].mbuf = mbuf;
+		dispatcher_requests[idle].requests[active_req].type = type;
+		dispatcher_requests[idle].requests[active_req].category = category;
+		dispatcher_requests[idle].requests[active_req].timestamp = timestamp;
+		dispatcher_requests[idle].requests[active_req].flag = READY;
+		jbsq_get_next(&(dispatch_states[idle].next_push));
+		dispatch_states[idle].occupancy++;
+	}
 }
 
-static inline void handle_preempted(int i)
+
+static inline void handle_finished(uint8_t i, uint8_t active_req)
+{
+	if (worker_responses[i].responses[active_req].mbuf == NULL)
+		log_warn("No mbuf was returned from worker\n");
+
+	context_free((ucontext_t *) worker_responses[i].responses[active_req].rnbl);
+	rte_pktmbuf_free((struct rte_mbuf *) worker_responses[i].responses[active_req].mbuf);
+    
+    preempt_check[i].check = false;
+	worker_responses[i].responses[active_req].flag = PROCESSED;
+}
+
+
+static inline void handle_preempted(uint8_t i, uint8_t active_req)
 {
 	void *rnbl, *mbuf;
 	uint8_t type, category;
 	uint64_t timestamp, runned_for;
 
-	rnbl = worker_responses[i].rnbl;
-	mbuf = worker_responses[i].mbuf;
-	category = worker_responses[i].category;
-	type = worker_responses[i].type;
-	timestamp = worker_responses[i].timestamp;
-	
-    tskq_enqueue_tail(&tskq[0], rnbl, mbuf, type, category, timestamp);
-
-	preempt_check[i] = false;
-	worker_responses[i].flag = PROCESSED;
+	rnbl = worker_responses[i].responses[active_req].rnbl;
+	mbuf = worker_responses[i].responses[active_req].mbuf;
+	category = worker_responses[i].responses[active_req].category;
+	type = worker_responses[i].responses[active_req].type;
+	timestamp = worker_responses[i].responses[active_req].timestamp;
+	tskq_enqueue_tail(&tskq[type], rnbl, mbuf, type, category, timestamp);
+	worker_responses[i].responses[active_req].flag = PROCESSED;
 }
+
+int init = 0;
 
 int Dispatcher::dispatch() {
     
+    if(unlikely(!init))
+    {
+        printf("Dispatcher init\n");
+        init = 1;
+        requests_init(n_workers);
+        preempt_check_init(n_workers);
+        dispatch_states_init(n_workers);
+    }
+
     uint64_t cur_tsc = rdtscp(NULL);    
 
     for (int i = 1; i < n_workers; i++) 
     {
-        if (worker_responses[i].flag != RUNNING) {
-            if (worker_responses[i].flag == FINISHED) {
-                handle_finished(i);
-            } 
-            else if (worker_responses[i].flag == PREEMPTED) {
-                handle_preempted(i);
+        preempt_worker(i, cur_tsc);
+        
+        if (dispatcher_requests[i].requests[dispatch_states[i].next_pop].flag != READY) {
+            
+            if (worker_responses[i].responses[dispatch_states[i].next_pop].flag == FINISHED)
+            {
+                handle_finished(i, dispatch_states[i].next_pop);
+                jbsq_get_next(&(dispatch_states[i].next_pop));
+                dispatch_states[i].occupancy--;
+		    }
+            else if (worker_responses[i].responses[dispatch_states[i].next_pop].flag == PREEMPTED)
+            {
+                handle_preempted(i, dispatch_states[i].next_pop);
+                jbsq_get_next(&(dispatch_states[i].next_pop));
+                dispatch_states[i].occupancy--;
             }
-            dispatch_request(i, cur_tsc);
-        } 
-        else {
-            // printf("Worker %d is still running \n", i);
-            preempt_worker(i, cur_tsc);
         }
     }
 

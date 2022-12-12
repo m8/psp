@@ -7,8 +7,10 @@
 #include "concord-leveldb.h"
 
 extern volatile struct networker_pointers_t networker_pointers;
-extern volatile struct worker_response worker_responses[MAX_WORKERS];
-extern volatile struct dispatcher_request dispatcher_requests[MAX_WORKERS];
+extern volatile struct jbsq_worker_response worker_responses[MAX_WORKERS];
+extern volatile struct jbsq_dispatcher_request dispatcher_requests[MAX_WORKERS];
+extern volatile struct jbsq_preemption preempt_check[MAX_WORKERS];
+
 
 extern "C"  
 {
@@ -21,6 +23,7 @@ extern "C"
 __thread ucontext_t uctx_main;
 __thread ucontext_t *cont;
 __thread volatile uint8_t finished;
+__thread uint8_t active_req;
 
 
 extern volatile uint64_t TEST_START_TIME;
@@ -62,6 +65,7 @@ extern "C"
             return;
         }
         concord_preempt_now = 0;
+
 
         /* Turn on to benchmark timeliness of yields */
         // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
@@ -171,31 +175,33 @@ int Worker::app_dequeue(unsigned long *payload) {
 void Worker::init_worker()
 {    
     cpu_preempt_points[this->worker_id] = &concord_preempt_now;
-    worker_responses[this->worker_id].flag = PROCESSED;
-    
-    assert(worker_responses[this->worker_id].flag == PROCESSED);
+    active_req = 0;
 
-    printf("Worker response for worker %d is %d\n", this->worker_id, worker_responses[this->worker_id].flag);
+    for(int i = 0; i < JBSQ_LEN; i++){
+        worker_responses[this->worker_id].responses[i].flag = PROCESSED;
+    }
+
     printf("Address of worker_responses is %p\n", worker_responses);
 }
 
 // TODO Should be inline
 static void finish_request(Worker* worker)
 {
-    worker_responses[worker->worker_id].timestamp = dispatcher_requests[worker->worker_id].timestamp;
-    worker_responses[worker->worker_id].type = dispatcher_requests[worker->worker_id].type;
-    worker_responses[worker->worker_id].mbuf = dispatcher_requests[worker->worker_id].mbuf;
-    worker_responses[worker->worker_id].rnbl = cont;
-    worker_responses[worker->worker_id].category = CONTEXT;
+    worker_responses[worker->worker_id].responses[active_req].timestamp = dispatcher_requests[worker->worker_id].requests[active_req].timestamp;
+    worker_responses[worker->worker_id].responses[active_req].type = dispatcher_requests[worker->worker_id].requests[active_req].type;
+    worker_responses[worker->worker_id].responses[active_req].mbuf = dispatcher_requests[worker->worker_id].requests[active_req].mbuf;
+    worker_responses[worker->worker_id].responses[active_req].rnbl = cont;
+    worker_responses[worker->worker_id].responses[active_req].category = CONTEXT;
+    if (finished)
+    {
+        worker_responses[worker->worker_id].responses[active_req].flag = FINISHED;
+    }
+    else
+    {
+        worker_responses[worker->worker_id].responses[active_req].flag = PREEMPTED;
+    }
+    dispatcher_requests[worker->worker_id].requests[active_req].flag = DONE;
 
-    if(finished == true)
-    {
-        worker_responses[worker->worker_id].flag = FINISHED;
-    }
-    else 
-    {
-        worker_responses[worker->worker_id].flag = PREEMPTED;
-    }
 }
 
 void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
@@ -268,9 +274,10 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
 static inline void handle_fake_new_packet(Worker* worker)
 {
     int ret;
-    struct rte_mbuf* payload = (struct rte_mbuf*)dispatcher_requests[worker->worker_id].mbuf;
+    struct rte_mbuf* payload = (struct rte_mbuf*)dispatcher_requests[worker->worker_id].requests[active_req].mbuf;
 
-    cont = (struct ucontext_t *)dispatcher_requests[worker->worker_id].rnbl;
+    cont = (struct ucontext_t *)dispatcher_requests[worker->worker_id].requests[active_req].rnbl;
+    
     getcontext_fast(cont);
     set_context_link(cont, &uctx_main);
     makecontext(cont, (void (*)(void))simple_generic_work, 2, worker, payload);
@@ -290,7 +297,7 @@ static inline void handle_context(Worker* worker)
 
     int ret;
     finished = false;
-    cont = (struct ucontext_t*) dispatcher_requests[worker->worker_id].rnbl;
+    cont = (struct ucontext_t*) dispatcher_requests[worker->worker_id].requests[active_req].rnbl;
     set_context_link(cont, &uctx_main);
     ret = swapcontext_fast(&uctx_main, cont);
     
@@ -333,15 +340,20 @@ void Worker::main_loop(void *wrkr) {
     { 
         while (!me->terminate) 
         {
-            while (dispatcher_requests[me->worker_id].flag == WAITING);
-            dispatcher_requests[me->worker_id].flag = WAITING;
-            if (dispatcher_requests[me->worker_id].category == PACKET)
+            while (dispatcher_requests[me->worker_id].requests[active_req].flag != READY);
+
+            preempt_check[me->worker_id].timestamp = rdtsc();
+            preempt_check[me->worker_id].check = true;
+
+
+            if (dispatcher_requests[me->worker_id].requests[active_req].category == PACKET)
             {
-                if (PSP_UNLIKELY(!IS_FIRST_PACKET))
+                if (unlikely(!IS_FIRST_PACKET))
                 {
                     TEST_START_TIME = get_us();
                     IS_FIRST_PACKET = true;
                 }
+
                 handle_fake_new_packet(me);
             }
             else
@@ -349,7 +361,11 @@ void Worker::main_loop(void *wrkr) {
                 handle_context(me);
             }
 
+            preempt_check[me->worker_id].check = false;
+
+
             finish_request(me);
+            jbsq_get_next(&active_req);
         }
     }
 

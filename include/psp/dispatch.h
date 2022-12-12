@@ -29,8 +29,9 @@
 #include <stdio.h>
 
 
-#define WAITING     0x00
-#define ACTIVE      0x01
+#define INACTIVE    0x00
+#define READY       0x01
+#define DONE        0x02 
 
 #define RUNNING     0x00
 #define FINISHED    0x01
@@ -53,6 +54,31 @@
 #define ETH_RX_MAX_DEPTH	32768
 #define ETH_RX_MAX_BATCH        6
 
+#define JBSQ_LEN    0x02
+
+#if JBSQ_LEN == 0x02
+static inline void jbsq_get_next(uint8_t* iter){
+        *iter =  *iter^1; // This is for JBSQ_LEN = 2
+}
+#elif JBSQ_LEN == 0x01
+static inline void jbsq_get_next(uint8_t* iter){}
+#endif
+
+
+
+struct jbsq_preemption {
+        uint64_t timestamp;
+        uint8_t check;
+        char make_it_64_bytes[55]; 
+}__attribute__((packed, aligned(64)));
+
+struct worker_state {
+        uint8_t next_push;
+        uint8_t next_pop;
+        uint8_t occupancy;
+} __attribute__((packed));
+
+
 struct worker_response
 {
         uint64_t flag;
@@ -74,6 +100,17 @@ struct dispatcher_request
         uint64_t timestamp;
         char make_it_64_bytes[30];
 } __attribute__((packed, aligned(64)));
+
+
+struct jbsq_worker_response {
+        struct worker_response responses[JBSQ_LEN];
+}__attribute__((packed, aligned(64)));
+
+struct jbsq_dispatcher_request {
+        struct dispatcher_request requests[JBSQ_LEN];
+}__attribute__((packed, aligned(64)));
+
+
 
 struct networker_pointers_t
 {

@@ -97,6 +97,7 @@ class Dispatcher : public Worker {
     public: int enqueue(unsigned long req, uint64_t cur_tsc);
     public: int dispatch();
     private: inline int push_to_rqueue(unsigned long req, RequestType *&rtype, uint64_t cur_tsc);
+    public : void dispatch_request(unsigned long cur_time, int num_workers);
 
     public: void set_dp(std::string &policy) {
         dp = Dispatcher::str_to_dp(policy);
