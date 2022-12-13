@@ -34,6 +34,7 @@ leveldb_writeoptions_t *leveldb_writeoptions = nullptr;
 NetWorker *net_worker;
 
 std::list<struct fakeNetworkPacket> fakeNetworkPackets;
+std::list<struct fakeNetworkPacket>::iterator pkt_iterator;
 struct mempool network_packet_pool __attribute((aligned(64)));
 
 
@@ -71,18 +72,17 @@ std::list<fakeNetworkPacket> generate_workload(double mu, double load_level, lon
     std::random_device rd;
     std::mt19937 gen(rd());
     std::vector<fakeNetworkPacket> requests;
-
-    std::poisson_distribution<int> distribution(mu * load_level * n_cores * duration_s * 1000000);
-
+    long long num_pkts = mu * load_level * n_cores * duration_s;
 
     std::list<struct fakeNetworkPacket> tmp;
+    long long cumulative_delay = 0;
 
-    for (int t = 0; t < (mu * load_level * n_cores * duration_s * 1000000); t++)
+    for (int t = 0; t < num_pkts; t++)
     {
         fakeNetworkPacket packet;
-
-        // ??????????
-        packet.arrival_delay = 0;
+        long long curr_delay = get_random_expo(MU*load_level) * 1000 * 1.8;
+        packet.arrival_delay = cumulative_delay + curr_delay;
+        cumulative_delay+= curr_delay;
 
         double r = (double) rand() / RAND_MAX;
         if (r < type_prob[0])
@@ -256,8 +256,9 @@ Psp::Psp(std::string &app_cfg, std::string l) {
             exit(ENODEV);
         }
 
-        fakeNetworkPackets = generate_workload(0.0030511, 0.05, 1, 1);
+        fakeNetworkPackets = generate_workload(MU, LOAD_LEVEL,BENCHMARK_DURATION_US, 16);
         printf("fakeNetworkPackets.size() = %d\n", fakeNetworkPackets.size());
+        pkt_iterator = fakeNetworkPackets.begin();
 
 
         // Setup application worker

@@ -1,6 +1,5 @@
 #include <psp/libos/su/MbSu.hh>
 #include <arpa/inet.h>
-#include "fake_work.h"
 
 int MbWorker::setup() {
     assert(n_peers > 0);
@@ -27,7 +26,6 @@ int MbWorker::process_request(unsigned long payload) {
     for (unsigned int i = 0 ; i < 1000; i++) {
         uint64_t start = rdtscp(NULL);
     */
-        fake_work(nloops);
         //fake_work2(*reinterpret_cast<unsigned int *>(req_addr), cycles_per_ns);
     /*
         uint64_t end = rdtscp(NULL);

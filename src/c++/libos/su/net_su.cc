@@ -49,6 +49,7 @@ int NetWorker::process_request(unsigned long payload)
 bool flag = true;
 uint64_t start_time = 0;
 extern std::list<struct fakeNetworkPacket> fakeNetworkPackets;
+extern std::list<struct fakeNetworkPacket>::iterator pkt_iterator;
 
 int NetWorker::work(int status, unsigned long payload)
 {
@@ -82,13 +83,11 @@ int NetWorker::work(int status, unsigned long payload)
     int batched_packets = 0;
 
     // Fake packet array
-    struct fakeNetworkPacket reqs[MAX_RX_BURST];
     int k = 0;
 
-    auto it = fakeNetworkPackets.begin();
-    while (it != fakeNetworkPackets.end())
+    while (pkt_iterator != fakeNetworkPackets.end())
     {
-        if (it->arrival_delay <= start_time - cur_tsc)
+        if (pkt_iterator->arrival_delay <= start_time - cur_tsc)
         {
             k++;
 
@@ -101,15 +100,17 @@ int NetWorker::work(int status, unsigned long payload)
                 continue;
             }
 
-            tskq_enqueue_tail(&tskq, cont, (struct mbuf *) it->pkt, 1, 1, rdtsc());
+            tskq_enqueue_tail(&tskq, cont, (struct mbuf *) pkt_iterator->pkt, 1, 1, cur_tsc);
 
-            it = fakeNetworkPackets.erase(it);
-            if (k == 4)
+            if (k == 6)
             {
                 break;
             }
+            pkt_iterator++;
         }
-        it++;
+        else{
+            break;
+        }
     }
 
 

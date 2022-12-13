@@ -34,7 +34,7 @@ struct db_req
 
 #define CPU_FREQ_GHZ    3.3
 
-
+#define LOAD_LEVEL                  0.5
 #define BENCHMARK_STOP_AT_PACKET     50
 #define BENCHMARK_DURATION_US        1000000 * 60 
 #define SCHEDULE_METHOD              METHOD_NONE
