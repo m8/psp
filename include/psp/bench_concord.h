@@ -2,9 +2,17 @@
 #define BENCH_CONCORD_H
 
 #include <sys/time.h>
+#include <psp/libos/Request.hh>
 
 typedef char db_key[32];
 typedef char db_value[32];
+
+struct fakeNetworkPacket
+{
+    bool processed;
+    rte_mbuf* pkt;
+    uint64_t arrival_delay;
+};
 
 enum DB_REQ_TYPE
 {

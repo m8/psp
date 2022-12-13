@@ -5,6 +5,7 @@
 #include <psp/dispatch.h>
 #include <psp/taskqueue.h>
 #include <psp/bench_concord.h>
+#include <queue>
 
 #define MAX_CLIENTS 64
 
@@ -20,6 +21,7 @@ extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER;
 extern volatile bool TEST_FINISHED;
 extern volatile bool IS_FIRST_PACKET;
 extern void print_stats(void);
+extern bool TEST_STARTED;
 
 
 namespace po = boost::program_options;
@@ -45,6 +47,9 @@ int NetWorker::process_request(unsigned long payload)
 }
 
 bool flag = true;
+uint64_t start_time = 0;
+extern std::list<struct fakeNetworkPacket> fakeNetworkPackets;
+
 int NetWorker::work(int status, unsigned long payload)
 {
     if (unlikely(flag && IS_FIRST_PACKET && (TEST_FINISHED || ((get_us() - TEST_START_TIME) > BENCHMARK_DURATION_US ))))
@@ -59,22 +64,33 @@ int NetWorker::work(int status, unsigned long payload)
         return -1;
     }
 
-    
-    unsigned long cur_tsc = rdtsc();
+    if(unlikely(!TEST_STARTED)) { return 0; }
 
-
-    if (dpt.dp != Dispatcher::dispatch_mode::DFCFS)
+    if (unlikely(start_time == 0))
     {
-        PSP_OK(dpt.dispatch(cur_tsc));
+        start_time = get_us();
     }
 
+    unsigned long cur_tsc = rdtsc();
+
+    // *================= Dispatch ===================*
+    PSP_OK(dpt.dispatch(cur_tsc));
+
     // // Check if we got packets from the network
-    if (udp_ctx->recv_packets() != EAGAIN) {
-        //Process a batch of packets
-        size_t batch_dequeued = 0;
-        n_batchs_rcvd++;
-        while (udp_ctx->pop_head > udp_ctx->pop_tail and batch_dequeued < MAX_RX_BURST) {
-            unsigned long req = udp_ctx->inbound_queue[udp_ctx->pop_tail & (INBOUND_Q_LEN - 1)];
+    
+    // *================= Process packets ===================*
+    int batched_packets = 0;
+
+    // Fake packet array
+    struct fakeNetworkPacket reqs[MAX_RX_BURST];
+    int k = 0;
+
+    auto it = fakeNetworkPackets.begin();
+    while (it != fakeNetworkPackets.end())
+    {
+        if (it->arrival_delay <= start_time - cur_tsc)
+        {
+            k++;
 
             ucontext_t *cont;
             int ret = context_alloc(&cont);
@@ -85,15 +101,19 @@ int NetWorker::work(int status, unsigned long payload)
                 continue;
             }
 
-            tskq_enqueue_tail(&tskq, cont, (struct mbuf *) req, 1, 1, cur_tsc);
+            tskq_enqueue_tail(&tskq, cont, (struct mbuf *) it->pkt, 1, 1, rdtsc());
 
-            udp_ctx->pop_tail++;
-            batch_dequeued++;
+            it = fakeNetworkPackets.erase(it);
+            if (k == 4)
+            {
+                break;
+            }
         }
-        //PSP_DEBUG("Net worker dequeued " << batch_dequeued << " requests");
-        n_rcvd += batch_dequeued;
+        it++;
     }
 
+
+    // *================= Dispatch ===================*
     dpt.dispatch_request(cur_tsc, dpt.n_workers);
 
     return 0;

@@ -65,7 +65,6 @@ extern "C"
             return;
         }
         concord_preempt_now = 0;
-        printf("Concord func called\n");
 
         /* Turn on to benchmark timeliness of yields */
         // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
@@ -251,7 +250,6 @@ static void finish_request(Worker* worker)
     }
     else
     {
-        printf("Save preempted flag\n");
         worker_responses[worker->worker_id].responses[active_req].flag = PREEMPTED;
     }
 

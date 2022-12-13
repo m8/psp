@@ -334,7 +334,6 @@ static inline void preempt_worker(uint8_t i, uint64_t cur_time)
 {
 	if (preempt_check[i].check && (((cur_time - preempt_check[i].timestamp) / 3.3) > 5000))
 	{
-        printf("Preempting worker %d\n", i);
 		// Avoid preempting more times.
 		preempt_check[i].check = false;
         // printf("Address: %p\n", cpu_preempt_points[i]);
@@ -440,7 +439,6 @@ int Dispatcher::dispatch(unsigned long cur_tsc) {
 		    }
             else if (worker_responses[i].responses[dispatch_states[i].next_pop].flag == PREEMPTED)
             {
-                printf("Preempted\n");
                 handle_preempted(i, dispatch_states[i].next_pop);
                 jbsq_get_next(&(dispatch_states[i].next_pop));
                 dispatch_states[i].occupancy--;

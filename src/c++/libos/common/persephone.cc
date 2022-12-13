@@ -15,7 +15,10 @@
 #include <psp/taskqueue.h>
 #include <leveldb/c.h>
 #include <psp/bench_concord.h>
-
+#include <queue>
+#include <random>
+#include <list>
+#include <base/mempool.h>
 
 std::string log_dir = "./";
 std::string label = "PspApp";
@@ -30,6 +33,70 @@ leveldb_writeoptions_t *leveldb_writeoptions = nullptr;
 
 NetWorker *net_worker;
 
+std::list<struct fakeNetworkPacket> fakeNetworkPackets;
+struct mempool network_packet_pool __attribute((aligned(64)));
+
+
+double get_random_expo(double lambda)
+{
+    double u;
+    u = rand() / (RAND_MAX + 1.0);
+    return -log(1- u) / lambda;
+}
+
+struct rte_mbuf * create_fake_packet(ReqType type)
+{
+    // Create a fake mbuf
+    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(net_worker->udp_ctx->mbuf_pool);
+    
+    char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) mbuf, char *, NET_HDR_SIZE);
+    char *type_addr = id_addr + sizeof(uint32_t);
+    char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
+    *reinterpret_cast<uint32_t *>(type_addr) = (int)type;
+
+    return mbuf;
+}
+
+
+// For each request I will give it an arrival delay using a poisson random variable and a type based on the probability distribution
+std::list<fakeNetworkPacket> generate_workload(double mu, double load_level, long duration_s, int n_cores)
+{
+    // create the mempool
+    // mempool_init(&network_packet_pool, sizeof(struct fakeNetworkPacket), 1000000);
+
+    // Get type for each request
+    ReqType possible_types[] = {ReqType::SHORT, ReqType::LONG};
+    double type_prob[] = {0.5, 0.5};
+    assert(type_prob[0] + type_prob[1] == 1);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::vector<fakeNetworkPacket> requests;
+
+    std::poisson_distribution<int> distribution(mu * load_level * n_cores * duration_s * 1000000);
+
+
+    std::list<struct fakeNetworkPacket> tmp;
+
+    for (int t = 0; t < (mu * load_level * n_cores * duration_s * 1000000); t++)
+    {
+        fakeNetworkPacket packet;
+
+        // ??????????
+        packet.arrival_delay = 0;
+
+        double r = (double) rand() / RAND_MAX;
+        if (r < type_prob[0])
+            packet.pkt = create_fake_packet(possible_types[0]);
+        else
+            packet.pkt = create_fake_packet(possible_types[1]);
+        
+        tmp.push_back(packet);
+    }
+
+    return tmp;
+}
+
 /********** CONTROL PLANE ******************/
 Psp::Psp(std::string &app_cfg, std::string l) {
     get_system_freq();
@@ -39,6 +106,8 @@ Psp::Psp(std::string &app_cfg, std::string l) {
     dpdk_net_init(app_cfg.c_str());
 
     taskqueue_init();
+
+
 
     leveldb_options_t *options = leveldb_options_create();
     leveldb_options_set_create_if_missing(options, 1);
@@ -187,6 +256,10 @@ Psp::Psp(std::string &app_cfg, std::string l) {
             PSP_ERROR("Operator must register at least one net worker.");
             exit(ENODEV);
         }
+
+        fakeNetworkPackets = generate_workload(0.0030511, 0.05, 1, 1);
+        printf("fakeNetworkPackets.size() = %d\n", fakeNetworkPackets.size());
+
 
         // Setup application worker
         Worker *net_workers[MAX_WORKERS];
