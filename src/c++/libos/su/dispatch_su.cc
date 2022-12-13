@@ -37,6 +37,9 @@ volatile bool IS_FIRST_PACKET = false;
 
 volatile int * cpu_preempt_points [MAX_WORKERS] = {0};
 
+volatile uint8_t idle_list[MAX_WORKERS];
+volatile uint8_t idle_list_head;
+
 struct task_queue tskq;
 
 
@@ -314,6 +317,7 @@ void dispatch_states_init(int n_workers)
 		dispatch_states[i].next_push = 0;
 		dispatch_states[i].next_pop = 0;
 		dispatch_states[i].occupancy = 0;
+        idle_list[i] = i;
 	}
 }
 
@@ -367,7 +371,6 @@ void Dispatcher::dispatch_request(uint64_t cur_time, int num_workers)
 		if (smart_tskq_dequeue(&tskq, &rnbl, &mbuf, &type,
 							&category, &timestamp, cur_time))
 			return;
-        printf("Idle core: %d\n", idle);
 		
 		uint8_t active_req = dispatch_states[idle].next_push;
 		dispatcher_requests[idle].requests[active_req].rnbl = rnbl;

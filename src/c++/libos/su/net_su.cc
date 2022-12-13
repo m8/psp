@@ -19,6 +19,8 @@ extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
 extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER;
 extern volatile bool TEST_FINISHED;
 extern volatile bool IS_FIRST_PACKET;
+extern void print_stats(void);
+
 
 namespace po = boost::program_options;
 
@@ -42,11 +44,24 @@ int NetWorker::process_request(unsigned long payload)
     return ENOTSUP;
 }
 
+bool flag = true;
 int NetWorker::work(int status, unsigned long payload)
 {
-    // Dispatch enqueued requests
-    // auto start = std::chrono::high_resolution_clock::now();
+    if (unlikely(flag && IS_FIRST_PACKET && (TEST_FINISHED || ((get_us() - TEST_START_TIME) > BENCHMARK_DURATION_US ))))
+    {
+        log_info("\n\n ----------- Benchmark FINISHED ----------- \n");
+        log_info("Benchmark - Total number of packets %d \n", TEST_TOTAL_PACKETS_COUNTER);
+        log_info("Benchmark - %d big, %d small packets\n", TEST_RCVD_BIG_PACKETS, TEST_RCVD_SMALL_PACKETS);
+        log_info("Benchmark - Time elapsed (us): %llu\n", get_us() - TEST_START_TIME);
+        print_stats();
+        log_info("Dispatcher exiting\n");
+        flag = false;
+        return -1;
+    }
+
+    
     unsigned long cur_tsc = rdtsc();
+
 
     if (dpt.dp != Dispatcher::dispatch_mode::DFCFS)
     {
@@ -73,25 +88,13 @@ int NetWorker::work(int status, unsigned long payload)
             tskq_enqueue_tail(&tskq, cont, (struct mbuf *) req, 1, 1, cur_tsc);
 
             udp_ctx->pop_tail++;
-            //}
             batch_dequeued++;
         }
         //PSP_DEBUG("Net worker dequeued " << batch_dequeued << " requests");
         n_rcvd += batch_dequeued;
     }
-    /*
-    if (unlikely(is_echo)) {
-        PSP_OK(udp_ctx->send_packets());
-    }
-    */
 
     dpt.dispatch_request(cur_tsc, dpt.n_workers);
-    // auto end = std::chrono::high_resolution_clock::now();
-    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-
-    // if (duration.count() > 0) {
-    //     printf("Net worker %ld us \n", duration.count());
-    // }
 
     return 0;
 }

@@ -3,6 +3,13 @@
 #include <psp/libos/Request.hh>
 
 extern uint64_t TEST_TOTAL_PACKETS_COUNTER;
+volatile bool TEST_STARTED = false;
+
+#ifdef LOAD_LEVEL // Passed during compilation
+	double load_level = LOAD_LEVEL/100.0; 
+#else
+	double load_level = 0;
+#endif
 
 int UdpContext::poll() {
     // Check RX
@@ -50,15 +57,18 @@ rte_mbuf * UdpContext::create_fake_packet(ReqType type)
     char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
     *reinterpret_cast<uint32_t *>(type_addr) = (int)type;
 
+    uint64_t wait_time_cycles = (1000 * CPU_FREQ_GHZ) / (MU * load_level);
+	uint64_t start_time = rdtsc();
+	while(rdtsc() - start_time < wait_time_cycles);
+
     return mbuf;
 }
 
 int created_packets = 0;
 
 int UdpContext::recv_packets() {
-    // Only dequeue if we have buffer space
-    // fake_recv_packets();
-    if(unlikely(created_packets >= BENCHMARK_CREATE_NO_PACKET))
+
+    if(unlikely(!TEST_STARTED || created_packets >= BENCHMARK_CREATE_NO_PACKET))
     {
         return EAGAIN;
     }

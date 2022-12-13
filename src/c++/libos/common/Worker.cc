@@ -88,6 +88,58 @@ extern "C"
 #define MICROBENCH 0
 
 
+#define ITERATOR_LIMIT 1
+
+struct idle_timestamping {
+    uint64_t start_req; // Timestamp when worker starts processing the job.
+    uint64_t before_ctx; // Timestamp immediately before ctx switch happens
+    uint64_t after_ctx; // Timestamp immediately after ctx switch happened
+    uint64_t after_response; // Timestamp immediately after worker writes to response
+};
+
+struct idle_timestamping idle_timestamps[ITERATOR_LIMIT] = {0};
+uint64_t idle_timestamp_iterator = 0;
+#define MAGIC_CPU 0
+
+#if LATENCY_DEBUG == 1
+#define RESULTS_ITERATOR_LIMIT 1048576
+struct request_perf_results {
+    uint64_t latency;
+    uint64_t slowdown;
+};
+struct request_perf_results results[RESULTS_ITERATOR_LIMIT] = {0};
+uint64_t results_iterator = 0;
+#endif
+
+void print_stats(void){
+    /* Idle time stats */
+    uint64_t num_yields = 0;
+    for(int i =0; i < (int)idle_timestamp_iterator-1; i++){
+        if(idle_timestamps[i].before_ctx){
+            printf("Total time lost :%llu\n", idle_timestamps[i+1].start_req - idle_timestamps[i].before_ctx);
+            printf("Time spent in context switch :%llu\n", idle_timestamps[i].after_ctx - idle_timestamps[i].before_ctx);
+            printf("Total time spent doing useful work: %lld\n", idle_timestamps[i].before_ctx - idle_timestamps[i].start_req);
+            num_yields++;
+        }
+        else {
+            printf("Total time lost :%llu\n", idle_timestamps[i+1].start_req - idle_timestamps[i].after_ctx);
+            printf("Total time spent doing useful work: %lld\n", idle_timestamps[i].after_ctx - idle_timestamps[i].start_req);
+        }
+        printf("Time spent sending response:%llu\n", idle_timestamps[i].after_response - idle_timestamps[i].after_ctx);
+        printf("Time spent idling:%llu\n", idle_timestamps[i+1].start_req - idle_timestamps[i].after_response);
+    }
+    printf("Total number of context switches: %llu\n", num_yields);
+
+#if LATENCY_DEBUG == 1
+    for(int i = 0; i <1048576; i++){
+        if(results[i].latency)
+            printf("Request latency, slowdown: %llu : %llu\n", results[i].latency, results[i].slowdown);
+    }
+#endif
+
+}
+
+
 /***************** Worker methods ***************/
 int Worker::register_dpt(Worker &dpt) {
     dpt_id = dpt.worker_id;
@@ -206,45 +258,35 @@ static void finish_request(Worker* worker)
     dispatcher_requests[worker->worker_id].requests[active_req].flag = DONE;
 }
 
-void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
+void simple_generic_work(Worker* worker, struct rte_mbuf* payload, uint64_t start_time)
 {
     char *id_addr = rte_pktmbuf_mtod_offset((struct rte_mbuf*) payload, char *, NET_HDR_SIZE);
     char *type_addr = id_addr + sizeof(uint32_t);
     char *req_addr = type_addr + sizeof(uint32_t) * 2; // also pass request size
     uint32_t type = *reinterpret_cast<uint32_t *>(type_addr);
 
-
-
     switch(static_cast<ReqType>(type)) {
         case ReqType::SHORT:
         {
-            #if (MICROBENCH == 1)
+            #if (RUN_UBENCH == 1)
             simpleloop(BENCHMARK_SMALL_PKT_SPIN);
             #else
+            
             size_t read_len;
             char* err;
             char* key = "musa";
-            auto start = std::chrono::high_resolution_clock::now();
             char *returned_value = cncrd_leveldb_get(leveldb_db, leveldb_readoptions,
                                     key, 32, &read_len, &err);
-            auto end = std::chrono::high_resolution_clock::now();
-            printf("get finished: time ellapsed %ld microseconds\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-
             #endif
             break;
         }
         case ReqType::LONG:
         {
-            #if (MICROBENCH == 1)
+            #if (RUN_UBENCH == 1)
             simpleloop(BENCHMARK_LARGE_PKT_SPIN);
             #else
             char* key = "musa";
-            auto start = std::chrono::high_resolution_clock::now();
             cncrd_leveldb_scan(leveldb_db, leveldb_readoptions, key);
-            auto end = std::chrono::high_resolution_clock::now();
-            printf("scan finished: key %s\n", key);
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            printf("scan took %ld microseconds\n", duration.count());
             #endif
             break;
         }
@@ -257,20 +299,38 @@ void simple_generic_work(Worker* worker, struct rte_mbuf* payload)
 
 
     TEST_TOTAL_PACKETS_COUNTER += 1;
-    printf("Worker %d finished request %d\n", worker->worker_id, TEST_TOTAL_PACKETS_COUNTER);
+   
+    #if LATENCY_DEBUG == 1
+    /* Turn on to get results */
+    uint64_t finish_time = rdtsc();
+    uint64_t elapsed_time =  finish_time - start_time;
+    results[results_iterator].latency = elapsed_time/(CPU_FREQ_GHZ * 1000);
+    int l = 0;
+    
+    if(type == (int)ReqType::LONG)
+    {
+        l = BENCHMARK_LARGE_PKT_NS;
+    }
+    else if (type == (int)ReqType::SHORT)
+    {
+        l = BENCHMARK_SMALL_PKT_NS;
+    }
+    else
+    {
+        printf("============= CHECK HERE (Problem) =============");
+    }
+    
+    results[results_iterator].slowdown = elapsed_time/(l * CPU_FREQ_GHZ);
+    results_iterator = (results_iterator+1) & (RESULTS_ITERATOR_LIMIT-1);
+    #endif
 
+   
     if (TEST_TOTAL_PACKETS_COUNTER == BENCHMARK_STOP_AT_PACKET)
     {
         TEST_END_TIME = get_us();
         TEST_FINISHED = true;
     }
 
-    // Response
-    *reinterpret_cast<uint32_t *> (req_addr) = 0;
-    payload->l4_len = sizeof(uint32_t) * 4; // request ID + resquest type + response size
-    
-    // worker->udp_ctx->outbound_queue[worker->udp_ctx->push_head++ & (OUTBOUND_Q_LEN - 1)] = (unsigned long)payload;
-    // worker->udp_ctx->send_packets();    
 
     finished = true;
     swapcontext_fast_to_control(cont, &uctx_main);
@@ -285,7 +345,7 @@ static inline void handle_fake_new_packet(Worker* worker)
     
     getcontext_fast(cont);
     set_context_link(cont, &uctx_main);
-    makecontext(cont, (void (*)(void))simple_generic_work, 2, worker, payload);
+    makecontext(cont, (void (*)(void))simple_generic_work, 3, worker, payload, dispatcher_requests[worker->worker_id].requests[active_req].timestamp);
 
     finished = false;
 
@@ -345,26 +405,27 @@ void Worker::main_loop(void *wrkr) {
     { 
         while (!me->terminate) 
         {
-            printf("Waiting for new request\n");
             while (dispatcher_requests[me->worker_id].requests[active_req].flag != READY);
 
             preempt_check[me->worker_id].timestamp = rdtsc();
             preempt_check[me->worker_id].check = true;
 
-
             if (dispatcher_requests[me->worker_id].requests[active_req].category == PACKET)
             {
-                printf("Handling new packet\n");
+                if (unlikely(!IS_FIRST_PACKET))
+                {
+                    TEST_START_TIME = get_us();
+                    IS_FIRST_PACKET = true;
+                }
+        
                 handle_fake_new_packet(me);
             }
             else
             {
-                printf("Handling context\n");
                 handle_context(me);
             }
+            
             preempt_check[me->worker_id].check = false;
-
-            printf("Finish Request\n");
             finish_request(me);
             jbsq_get_next(&active_req);
         }

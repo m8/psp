@@ -14,6 +14,7 @@
 #include <psp/dispatch.h>
 #include <psp/taskqueue.h>
 #include <leveldb/c.h>
+#include <psp/bench_concord.h>
 
 
 std::string log_dir = "./";
@@ -67,7 +68,7 @@ Psp::Psp(std::string &app_cfg, std::string l) {
 
     // Create Db
     std::vector<int> keys;
-    for (size_t i = 0; i < 100000; i++)
+    for (size_t i = 0; i < DB_NUM_KEYS; i++)
     {
         char keybuf[32], valbuf[32];
 

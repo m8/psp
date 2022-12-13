@@ -54,7 +54,7 @@
 #define ETH_RX_MAX_DEPTH	32768
 #define ETH_RX_MAX_BATCH        6
 
-#define JBSQ_LEN    0x02
+#define JBSQ_LEN    0x01
 
 #if JBSQ_LEN == 0x02
 static inline void jbsq_get_next(uint8_t* iter){

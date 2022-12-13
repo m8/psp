@@ -2,8 +2,11 @@
 
 #include <csignal>
 #include <leveldb/c.h>
+#include <psp/bench_concord.h>
 
 extern NetWorker *net_worker;
+extern volatile uint64_t TEST_START_TIME;
+extern volatile bool TEST_STARTED;
 
 int main(int argc, char *argv[])
 {
@@ -31,7 +34,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    net_worker->fake_work();
+    // All workers created start the testt
+    TEST_START_TIME = get_us();
+    TEST_STARTED = true;
+
 
     /* Join threads */
     for (unsigned int i = 0; i < total_workers; ++i)
