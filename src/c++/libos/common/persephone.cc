@@ -58,7 +58,6 @@ struct rte_mbuf * create_fake_packet(ReqType type)
 }
 
 
-// For each request I will give it an arrival delay using a poisson random variable and a type based on the probability distribution
 std::list<fakeNetworkPacket> generate_workload(double mu, double load_level, long duration_s, int n_cores)
 {
     // create the mempool

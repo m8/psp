@@ -1,0 +1,104 @@
+make: Entering directory '/home/m8/concord/psp/submodules/fake_work'
+cc -c -Wno-register -O3 -mtune=intel -DNDEBUG -fPIC fake_work.c
+cc -shared -o libfake.so fake_work.o
+make: Leaving directory '/home/m8/concord/psp/submodules/fake_work'
+make: Entering directory '/home/m8/concord/psp/submodules/rocksdb'
+  GEN      util/build_version.cc
+make: Nothing to be done for 'static_lib'.
+make: Leaving directory '/home/m8/concord/psp/submodules/rocksdb'
+-- /home/m8/concord/psp/src/c++/libos/su/dispatch_su.cc/home/m8/concord/psp/src/c++/libos/su/mb_su.cc/home/m8/concord/psp/src/c++/libos/su/net_su.cc/home/m8/concord/psp/src/c++/libos/su/rocksdb_su.cc/home/m8/concord/psp/src/c++/libos/common/Worker.cc/home/m8/concord/psp/src/c++/libos/common/persephone.cc/home/m8/concord/psp/src/c++/libos/io/udp_dpdk/context.cc/home/m8/concord/psp/src/c++/libos/io/udp_dpdk/dpdk.cc/home/m8/concord/psp/src/c++/libos/io/lrpc/context.cc/home/m8/concord/psp/src/c++/libos/common/context_fast.S
+-- Boost version: 1.65.1
+-- Found the following Boost libraries:
+--   program_options
+--   chrono
+--   context
+--   system
+-- Boost version: 1.65.1
+-- Found the following Boost libraries:
+--   program_options
+--   chrono
+--   context
+--   system
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/m8/concord/psp
+make: Entering directory '/home/m8/concord/psp/build'
+/usr/bin/cmake -H/home/m8/concord/psp -B/home/m8/concord/psp/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/m8/concord/psp/build/CMakeFiles /home/m8/concord/psp/build/CMakeFiles/progress.marks
+make -f CMakeFiles/Makefile2 all
+make[1]: Entering directory '/home/m8/concord/psp/build'
+make -f CMakeFiles/dpdk.dir/build.make CMakeFiles/dpdk.dir/depend
+make -f src/c++/time/CMakeFiles/psp-time.dir/build.make src/c++/time/CMakeFiles/psp-time.dir/depend
+make -f src/c++/common/CMakeFiles/psp-common.dir/build.make src/c++/common/CMakeFiles/psp-common.dir/depend
+make[2]: Entering directory '/home/m8/concord/psp/build'
+cd /home/m8/concord/psp/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/m8/concord/psp /home/m8/concord/psp /home/m8/concord/psp/build /home/m8/concord/psp/build /home/m8/concord/psp/build/CMakeFiles/dpdk.dir/DependInfo.cmake --color=
+make[2]: Entering directory '/home/m8/concord/psp/build'
+cd /home/m8/concord/psp/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/m8/concord/psp /home/m8/concord/psp/src/c++/time /home/m8/concord/psp/build /home/m8/concord/psp/build/src/c++/time /home/m8/concord/psp/build/src/c++/time/CMakeFiles/psp-time.dir/DependInfo.cmake --color=
+make[2]: Entering directory '/home/m8/concord/psp/build'
+cd /home/m8/concord/psp/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/m8/concord/psp /home/m8/concord/psp/src/c++/common /home/m8/concord/psp/build /home/m8/concord/psp/build/src/c++/common /home/m8/concord/psp/build/src/c++/common/CMakeFiles/psp-common.dir/DependInfo.cmake --color=
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make -f CMakeFiles/dpdk.dir/build.make CMakeFiles/dpdk.dir/build
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make -f src/c++/common/CMakeFiles/psp-common.dir/build.make src/c++/common/CMakeFiles/psp-common.dir/build
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make -f src/c++/time/CMakeFiles/psp-time.dir/build.make src/c++/time/CMakeFiles/psp-time.dir/build
+make[2]: Entering directory '/home/m8/concord/psp/build'
+make[2]: Nothing to be done for 'CMakeFiles/dpdk.dir/build'.
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make[2]: Entering directory '/home/m8/concord/psp/build'
+make[2]: Nothing to be done for 'src/c++/common/CMakeFiles/psp-common.dir/build'.
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make[2]: Entering directory '/home/m8/concord/psp/build'
+make[2]: Nothing to be done for 'src/c++/time/CMakeFiles/psp-time.dir/build'.
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+[ 29%] Built target dpdk
+[ 37%] Built target psp-common
+[ 44%] Built target psp-time
+make -f src/c++/libos/CMakeFiles/psp-libos.dir/build.make src/c++/libos/CMakeFiles/psp-libos.dir/depend
+make[2]: Entering directory '/home/m8/concord/psp/build'
+cd /home/m8/concord/psp/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/m8/concord/psp /home/m8/concord/psp/src/c++/libos /home/m8/concord/psp/build /home/m8/concord/psp/build/src/c++/libos /home/m8/concord/psp/build/src/c++/libos/CMakeFiles/psp-libos.dir/DependInfo.cmake --color=
+Scanning dependencies of target psp-libos
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make -f src/c++/libos/CMakeFiles/psp-libos.dir/build.make src/c++/libos/CMakeFiles/psp-libos.dir/build
+make[2]: Entering directory '/home/m8/concord/psp/build'
+[ 48%] Building CXX object src/c++/libos/CMakeFiles/psp-libos.dir/common/persephone.cc.o
+cd /home/m8/concord/psp/build/src/c++/libos && /usr/bin/c++   -I/home/m8/concord/psp/include -I/home/m8/concord/psp/build/ExternalProject/dpdk/include -I/home/m8/concord/psp/build/ExternalProject/dpdk/include/dpdk -I/home/m8/concord/psp/../benchmarks/leveldb/leveldb/include -I/home/m8/concord/psp/../benchmarks/leveldb/lib -I/home/m8/concord/psp/submodules/fake_work -I/home/m8/concord/psp/submodules/rocksdb/include/rocksdb  -ggdb -fstack-protector -fPIC -Wall -Wextra -Wno-deprecated-declarations -Wno-uninitialized -Wno-unused-parameter -Wno-register -Wl,-zdefs -fvisibility=hidden -I/usr/include/boost -Wno-unused-variable -Wno-empty-body -std=c++17 -D__STDC_LIMIT_MACROS -Wno-register -O3 -mtune=intel -DNDEBUG   @/home/m8/concord/psp/submodules/dpdk/x86_64-native-linuxapp-gcc/include/cflags.txt -o CMakeFiles/psp-libos.dir/common/persephone.cc.o -c /home/m8/concord/psp/src/c++/libos/common/persephone.cc
+[ 51%] Linking CXX static library libpsp-libos.a
+cd /home/m8/concord/psp/build/src/c++/libos && /usr/bin/cmake -P CMakeFiles/psp-libos.dir/cmake_clean_target.cmake
+cd /home/m8/concord/psp/build/src/c++/libos && /usr/bin/cmake -E cmake_link_script CMakeFiles/psp-libos.dir/link.txt --verbose=1
+/usr/bin/ar qc libpsp-libos.a  CMakeFiles/psp-libos.dir/su/dispatch_su.cc.o CMakeFiles/psp-libos.dir/su/mb_su.cc.o CMakeFiles/psp-libos.dir/su/net_su.cc.o CMakeFiles/psp-libos.dir/su/rocksdb_su.cc.o CMakeFiles/psp-libos.dir/common/Worker.cc.o CMakeFiles/psp-libos.dir/common/persephone.cc.o CMakeFiles/psp-libos.dir/io/udp_dpdk/context.cc.o CMakeFiles/psp-libos.dir/io/udp_dpdk/dpdk.cc.o CMakeFiles/psp-libos.dir/io/lrpc/context.cc.o CMakeFiles/psp-libos.dir/common/context_fast.S.o
+/usr/bin/ranlib libpsp-libos.a
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+[ 85%] Built target psp-libos
+make -f src/c++/apps/app/CMakeFiles/psp-app.dir/build.make src/c++/apps/app/CMakeFiles/psp-app.dir/depend
+make -f src/c++/apps/client/CMakeFiles/client.dir/build.make src/c++/apps/client/CMakeFiles/client.dir/depend
+make[2]: Entering directory '/home/m8/concord/psp/build'
+cd /home/m8/concord/psp/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/m8/concord/psp /home/m8/concord/psp/src/c++/apps/app /home/m8/concord/psp/build /home/m8/concord/psp/build/src/c++/apps/app /home/m8/concord/psp/build/src/c++/apps/app/CMakeFiles/psp-app.dir/DependInfo.cmake --color=
+make[2]: Entering directory '/home/m8/concord/psp/build'
+cd /home/m8/concord/psp/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/m8/concord/psp /home/m8/concord/psp/src/c++/apps/client /home/m8/concord/psp/build /home/m8/concord/psp/build/src/c++/apps/client /home/m8/concord/psp/build/src/c++/apps/client/CMakeFiles/client.dir/DependInfo.cmake --color=
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make -f src/c++/apps/client/CMakeFiles/client.dir/build.make src/c++/apps/client/CMakeFiles/client.dir/build
+make[2]: Entering directory '/home/m8/concord/psp/build'
+Scanning dependencies of target psp-app
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+make -f src/c++/apps/app/CMakeFiles/psp-app.dir/build.make src/c++/apps/app/CMakeFiles/psp-app.dir/build
+make[2]: Entering directory '/home/m8/concord/psp/build'
+[ 88%] Linking CXX executable client
+cd /home/m8/concord/psp/build/src/c++/apps/client && /usr/bin/cmake -E cmake_link_script CMakeFiles/client.dir/link.txt --verbose=1
+[ 92%] Building CXX object src/c++/apps/app/CMakeFiles/psp-app.dir/psp_app.cc.o
+cd /home/m8/concord/psp/build/src/c++/apps/app && /usr/bin/c++   -I/home/m8/concord/psp/include -I/home/m8/concord/psp/build/ExternalProject/dpdk/include -I/home/m8/concord/psp/build/ExternalProject/dpdk/include/dpdk -I/home/m8/concord/psp/../benchmarks/leveldb/leveldb/include -I/home/m8/concord/psp/../benchmarks/leveldb/lib -I/home/m8/concord/psp/submodules/fake_work -I/home/m8/concord/psp/submodules/rocksdb/include/rocksdb  -ggdb -fstack-protector -fPIC -Wall -Wextra -Wno-deprecated-declarations -Wno-uninitialized -Wno-unused-parameter -Wno-register -Wl,-zdefs -fvisibility=hidden -I/usr/include/boost -Wno-unused-variable -Wno-empty-body -std=c++17 -D__STDC_LIMIT_MACROS -Wno-register -O3 -mtune=intel -DNDEBUG   @/home/m8/concord/psp/submodules/dpdk/x86_64-native-linuxapp-gcc/include/cflags.txt -o CMakeFiles/psp-app.dir/psp_app.cc.o -c /home/m8/concord/psp/src/c++/apps/app/psp_app.cc
+/usr/bin/c++   -ggdb -fstack-protector -fPIC -Wall -Wextra -Wno-deprecated-declarations -Wno-uninitialized -Wno-unused-parameter -Wno-register -Wl,-zdefs -fvisibility=hidden -I/usr/include/boost -Wno-unused-variable -Wno-empty-body -std=c++17 -D__STDC_LIMIT_MACROS -Wno-register -O3 -mtune=intel -DNDEBUG  @/home/m8/concord/psp/submodules/dpdk/x86_64-native-linuxapp-gcc/lib/ldflags.txt CMakeFiles/client.dir/client.cc.o  -o client -Wl,-rpath,/home/m8/concord/psp/submodules/fake_work ../../libos/libpsp-libos.a ../../common/libpsp-common.a -lboost_program_options -lboost_context -lnuma -lyaml-cpp ../../time/libpsp-time.a -lboost_system -lboost_chrono -lpthread ../../../../../../benchmarks/leveldb/lib/concord_apileveldb.a ../../../../../../benchmarks/leveldb/leveldb/concord_libleveldb.a ../../../../../submodules/fake_work/libfake.so -lgflags -lsnappy -lz -llz4 -lbz2 -lzstd ../../../../../submodules/rocksdb/librocksdb.a -lgflags -lsnappy -lz -llz4 -lbz2 -lzstd ../../../../../submodules/rocksdb/librocksdb.a -ljemalloc 
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+[ 96%] Built target client
+[100%] Linking CXX executable psp-app
+cd /home/m8/concord/psp/build/src/c++/apps/app && /usr/bin/cmake -E cmake_link_script CMakeFiles/psp-app.dir/link.txt --verbose=1
+/usr/bin/c++   -ggdb -fstack-protector -fPIC -Wall -Wextra -Wno-deprecated-declarations -Wno-uninitialized -Wno-unused-parameter -Wno-register -Wl,-zdefs -fvisibility=hidden -I/usr/include/boost -Wno-unused-variable -Wno-empty-body -std=c++17 -D__STDC_LIMIT_MACROS -Wno-register -O3 -mtune=intel -DNDEBUG  @/home/m8/concord/psp/submodules/dpdk/x86_64-native-linuxapp-gcc/lib/ldflags.txt CMakeFiles/psp-app.dir/psp_app.cc.o  -o psp-app -Wl,-rpath,/home/m8/concord/psp/submodules/fake_work ../../libos/libpsp-libos.a ../../common/libpsp-common.a -lboost_program_options -lboost_context -lnuma -lyaml-cpp ../../time/libpsp-time.a -lboost_system -lboost_chrono -lpthread ../../../../../../benchmarks/leveldb/lib/concord_apileveldb.a ../../../../../../benchmarks/leveldb/leveldb/concord_libleveldb.a ../../../../../submodules/fake_work/libfake.so -lgflags -lsnappy -lz -llz4 -lbz2 -lzstd ../../../../../submodules/rocksdb/librocksdb.a -lgflags -lsnappy -lz -llz4 -lbz2 -lzstd ../../../../../submodules/rocksdb/librocksdb.a -ljemalloc 
+make[2]: Leaving directory '/home/m8/concord/psp/build'
+[100%] Built target psp-app
+make[1]: Leaving directory '/home/m8/concord/psp/build'
+/usr/bin/cmake -E cmake_progress_start /home/m8/concord/psp/build/CMakeFiles 0
+make: Leaving directory '/home/m8/concord/psp/build'
+Processor Base Frequency:  0000 MHz (0.000 cycles per ns)
+EAL: Probing VFIO support...
+EAL: No legacy callbacks, legacy socket not created
+DPDPDK
